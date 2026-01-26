@@ -725,9 +725,10 @@ class CheckboxListUI:
             self._cb_container.layout.display = "block"
         else:
             self._cb_container.layout.display = "none" if loading else "block"
-        self.btn_run.disabled = loading or len(self._selected) == 0
+        # Only disable rescan during loading, allow other interactions
         self.btn_rescan.disabled = loading
-        self.search_input.disabled = loading
+        # Run button depends on selection, not loading state
+        self.btn_run.disabled = len(self._selected) == 0
         if not loading:
             self.loading_status.value = ""
 
@@ -780,7 +781,7 @@ class CheckboxListUI:
         self.set_loading(True)
 
         # Shared state between worker and main thread
-        state = {"status": "Starting", "running": True, "needs_refresh": False}
+        state = {"current_dir": "", "running": True, "needs_refresh": False}
         state_lock = threading.Lock()
 
         def on_found(path: str):
@@ -791,16 +792,11 @@ class CheckboxListUI:
                 self._filtered_indices.append(real_idx)
 
             with state_lock:
-                state["status"] = f"Found {len(self._items)} files"
                 state["needs_refresh"] = True
 
         def on_scanning(dir_name: str):
-            from .utils import short
-
             with state_lock:
-                count = len(self._items)
-                count_str = f"Found {count} | " if count > 0 else ""
-                state["status"] = f"{count_str}Scanning: {short(dir_name, 35)}"
+                state["current_dir"] = dir_name
 
         def worker():
             try:
@@ -808,6 +804,7 @@ class CheckboxListUI:
             finally:
                 with state_lock:
                     state["running"] = False
+                    state["current_dir"] = ""
 
         # Start worker thread
         threading.Thread(target=worker, daemon=True).start()
@@ -816,20 +813,33 @@ class CheckboxListUI:
         dots = 0
         while True:
             time.sleep(0.3)
-            dots = (dots % 3) + 1
-            dot_str = "." * dots
+            dots = (dots + 1) % 4
+            # Animate dots: .Scanning, ..Scanning., ...Scanning.., Scanning...
+            left_dots = "." * dots
+            right_dots = "." * (3 - dots)
 
             with state_lock:
-                status = state["status"]
+                count = len(self._items)
+                current_dir = state.get("current_dir", "")
                 running = state["running"]
                 needs_refresh = state["needs_refresh"]
                 state["needs_refresh"] = False
+
+            # Build status text with animated scanning
+            count_str = f"Found {count}" if count > 0 else ""
+            scan_str = f"{left_dots}Scanning{right_dots}" if current_dir else ""
+            if count_str and scan_str:
+                status = f"{count_str} | {scan_str} {current_dir}"
+            elif count_str:
+                status = count_str
+            else:
+                status = f"{scan_str} {current_dir}"
 
             # Update loading status in header
             self.loading_status.value = (
                 f"<span style='color: #888; font-size: 0.85em; margin-left: 10px;'>"
                 f"<i class='fa fa-spinner fa-spin' style='margin-right: 6px;'></i>"
-                f"{status}{dot_str}</span>"
+                f"{status}</span>"
             )
 
             # Refresh the file list display if new items were found
@@ -921,7 +931,7 @@ class CheckboxListUI:
                 # Use inherit colors and opacity for dark mode compatibility
                 info.value = (
                     f"<div style='line-height: 1.4; color: inherit;'>"
-                    f"<div style='font-weight: 500;'>{short(filename, 95)}</div>"
+                    f"<div style='font-weight: 500; word-break: break-word;'>{filename}</div>"
                     f"<div style='font-size: 0.85em; opacity: 0.7;'>{size_str} &middot; {date_str}</div>"
                     f"</div>"
                 )

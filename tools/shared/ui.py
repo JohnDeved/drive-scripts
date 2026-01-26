@@ -749,22 +749,6 @@ class CheckboxListUI:
         if not loading:
             self.scanning_path_lbl.value = ""
 
-    def set_scanning_path(self, path: str) -> None:
-        """Update current scanning path label."""
-        from .utils import short
-
-        # Show just the filename for cleaner display
-        display = os.path.basename(path) if os.path.basename(path) else path
-
-        # Show count if we have items
-        count = len(self._items) + 1  # +1 for the one being added
-        count_str = f"Found {count}: " if count > 0 else ""
-
-        self.scanning_path_lbl.value = (
-            f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
-            f"{count_str}{short(display, 50)}</div>"
-        )
-
     def load_items_async(
         self,
         loader_func: Callable[[], List[str]],
@@ -812,89 +796,43 @@ class CheckboxListUI:
         self._selected = set()
         self._file_meta = {}
         self.set_loading(True)
-
-        # Shared state between threads
-        pending_items: List[str] = []
-        items_lock = threading.Lock()
-        scan_done = threading.Event()
-        last_path = [""]
+        self.scanning_path_lbl.value = "<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>Starting...</div>"
 
         def on_found(path: str):
-            with items_lock:
-                pending_items.append(path)
-                last_path[0] = path
+            self._items.append(path)
+            term = self.search_input.value.lower()
+            real_idx = len(self._items) - 1
+            if not term or term in os.path.basename(path).lower():
+                self._filtered_indices.append(real_idx)
+
+            # Update status
+            from .utils import short
+
+            count = len(self._items)
+            filename = os.path.basename(path)
+            self.scanning_path_lbl.value = (
+                f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
+                f"Found {count}: {short(filename, 45)}</div>"
+            )
 
         def on_scanning(status: str):
-            with items_lock:
-                last_path[0] = status
+            from .utils import short
 
-        def scanner():
+            self.scanning_path_lbl.value = (
+                f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
+                f"{short(status, 55)}</div>"
+            )
+
+        def worker():
             try:
                 loader_func(on_found, on_scanning)
             finally:
-                scan_done.set()
-
-        def ui_updater():
-            """Periodically flush pending items to UI."""
-            dots = 0
-            while not scan_done.is_set():
-                time.sleep(0.2)
-                dots = (dots + 1) % 4
-
-                with items_lock:
-                    new_items = list(pending_items)
-                    pending_items.clear()
-                    current_path = last_path[0]
-
-                if new_items:
-                    start_idx = len(self._items)
-                    self._items.extend(new_items)
-                    term = self.search_input.value.lower()
-                    for i, item in enumerate(new_items):
-                        real_idx = start_idx + i
-                        if not term or term in os.path.basename(item).lower():
-                            self._filtered_indices.append(real_idx)
-                    self._update_display()
-
-                # Update scanning indicator with animation
-                count = len(self._items)
-                dot_str = "." * (dots + 1)
-                if current_path:
-                    filename = os.path.basename(current_path)
-                    from .utils import short
-
-                    self.scanning_path_lbl.value = (
-                        f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
-                        f"Found {count}{dot_str} {short(filename, 40)}</div>"
-                    )
-                else:
-                    self.scanning_path_lbl.value = (
-                        f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
-                        f"Searching{dot_str}</div>"
-                    )
-
-            # Final flush
-            with items_lock:
-                new_items = list(pending_items)
-                pending_items.clear()
-
-            if new_items:
-                start_idx = len(self._items)
-                self._items.extend(new_items)
-                term = self.search_input.value.lower()
-                for i, item in enumerate(new_items):
-                    real_idx = start_idx + i
-                    if not term or term in os.path.basename(item).lower():
-                        self._filtered_indices.append(real_idx)
                 self._update_display()
+                self.set_loading(False)
+                if on_complete:
+                    on_complete()
 
-            self.set_loading(False)
-            if on_complete:
-                on_complete()
-
-        # Start both threads
-        threading.Thread(target=scanner, daemon=True).start()
-        threading.Thread(target=ui_updater, daemon=True).start()
+        threading.Thread(target=worker, daemon=True).start()
 
     def _ensure_metadata(self, indices: List[int]) -> None:
         """Fetch metadata for specific indices if missing."""

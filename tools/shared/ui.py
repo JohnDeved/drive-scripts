@@ -310,6 +310,7 @@ class ProgressUI:
                 self._confirm_response = True
             if self._confirm_ui:
                 self._confirm_ui.layout.display = "none"
+                self._confirm_ui.children = []
             self._confirm_event.set()
 
         def on_discard(_):
@@ -317,6 +318,7 @@ class ProgressUI:
                 self._confirm_response = False
             if self._confirm_ui:
                 self._confirm_ui.layout.display = "none"
+                self._confirm_ui.children = []
             self._confirm_event.set()
 
         btn_keep.on_click(on_keep)

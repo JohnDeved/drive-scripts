@@ -291,11 +291,6 @@ def run_compression(
         ext = os.path.splitext(src)[1].lower()
         out_ext = ".nsz" if ext == ".nsp" else ".xcz"
         local_input = os.path.join(config.temp_dir, basename)
-        # We don't know the exact local output path until compression runs,
-        # but we can predict it for cleanup.
-        local_output_pred = os.path.join(
-            config.temp_dir, os.path.splitext(basename)[0] + out_ext
-        )
         drive_output = os.path.splitext(src)[0] + out_ext
 
         # Clean start

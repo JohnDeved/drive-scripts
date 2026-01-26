@@ -835,11 +835,29 @@ class CheckboxListUI:
             else:
                 status = f"{scan_str} {current_dir}"
 
-            # Update loading status in header
+            # Update loading status in header with shiny gradient animation
+            # Use a unique ID for the style to avoid conflicts
+            shiny_style = (
+                "<style>"
+                "@keyframes shimmer {"
+                "  0% { background-position: -200% 0; }"
+                "  100% { background-position: 200% 0; }"
+                "}"
+                ".shiny-text {"
+                "  background: linear-gradient(90deg, #888 0%, #888 35%, #ccc 50%, #888 65%, #888 100%);"
+                "  background-size: 200% 100%;"
+                "  -webkit-background-clip: text;"
+                "  background-clip: text;"
+                "  -webkit-text-fill-color: transparent;"
+                "  animation: shimmer 2s infinite linear;"
+                "}"
+                "</style>"
+            )
             self.loading_status.value = (
-                f"<span style='color: #888; font-size: 0.85em; margin-left: 10px;'>"
-                f"<i class='fa fa-spinner fa-spin' style='margin-right: 6px;'></i>"
-                f"{status}</span>"
+                f"{shiny_style}"
+                f"<span style='font-size: 0.85em; margin-left: 10px;'>"
+                f"<i class='fa fa-spinner fa-spin' style='color: #888; margin-right: 6px;'></i>"
+                f"<span class='shiny-text'>{status}</span></span>"
             )
 
             # Refresh the file list display if new items were found
@@ -929,9 +947,10 @@ class CheckboxListUI:
 
                 # Set HTML content
                 # Use inherit colors and opacity for dark mode compatibility
+                # CSS ellipsis for text overflow
                 info.value = (
-                    f"<div style='line-height: 1.4; color: inherit;'>"
-                    f"<div style='font-weight: 500; word-break: break-word;'>{filename}</div>"
+                    f"<div style='line-height: 1.4; color: inherit; overflow: hidden;'>"
+                    f"<div style='font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'>{filename}</div>"
                     f"<div style='font-size: 0.85em; opacity: 0.7;'>{size_str} &middot; {date_str}</div>"
                     f"</div>"
                 )

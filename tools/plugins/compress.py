@@ -210,29 +210,59 @@ def _compress_file(
         return False, str(e), ""
 
 
-def _verify_file(path: str) -> Tuple[bool, str]:
+def _verify_file(
+    path: str, on_progress: Callable[[int, int], None]
+) -> Tuple[bool, str]:
     """Verify compressed file using nsz API."""
     from nsz.NszDecompressor import VerificationException, verify  # type: ignore
 
-    # Dummy status report to suppress enlighten progress bars
-    # [read, written, total, step]
-    status_report = [[0, 0, 1, "Verifying"]]
+    file_path = Path(path)
+    total_size = file_path.stat().st_size
 
-    try:
-        verify(
-            filePath=Path(path),
-            fixPadding=False,
-            raiseVerificationException=True,
-            raisePfs0Exception=True,
-            originalFilePath=None,  # quick verify
-            statusReportInfo=[status_report, 0],
-            pleaseNoPrint=None,
-        )
-        return True, ""
-    except VerificationException as e:
-        return False, str(e)
-    except Exception as e:
-        return False, str(e)
+    # Use Manager to create a shared list for status reporting
+    with Manager() as manager:
+        status_report = manager.list()
+        # [read, written, total, step]
+        status_report.append([0, 0, total_size, "Verifying"])
+
+        error: List[Exception | None] = [None]
+
+        def worker() -> None:
+            try:
+                verify(
+                    filePath=file_path,
+                    fixPadding=False,
+                    raiseVerificationException=True,
+                    raisePfs0Exception=True,
+                    originalFilePath=None,  # quick verify
+                    statusReportInfo=[status_report, 0],
+                    pleaseNoPrint=None,
+                )
+            except Exception as e:
+                error[0] = e
+
+        thread = threading.Thread(target=worker)
+        thread.start()
+
+        # Poll for progress
+        while thread.is_alive():
+            if len(status_report) > 0:
+                try:
+                    # [read, written, total, step]
+                    read, _, _, _ = status_report[0]
+                    on_progress(read, total_size)
+                except (ValueError, IndexError):
+                    pass
+            time.sleep(0.1)
+
+        thread.join()
+
+        if error[0]:
+            if isinstance(error[0], VerificationException):
+                return False, str(error[0])
+            return False, str(error[0])
+
+    return True, ""
 
 
 def run_compression(files: List[str], progress: ProgressUI) -> None:
@@ -287,7 +317,12 @@ def run_compression(files: List[str], progress: ProgressUI) -> None:
             progress.set_step(f"[3/4] Verifying ({i}/{total_files})")
             # Verify progress is indefinite/spinner mostly, so we just set indeterminate
             progress.set_progress(0, 1, os.path.basename(local_output))
-            ok, err = _verify_file(local_output)
+            ok, err = _verify_file(
+                local_output,
+                lambda d, t: progress.set_progress(
+                    d, t, os.path.basename(local_output)
+                ),
+            )
             if not ok:
                 raise RuntimeError(f"Verify failed: {err}")
 

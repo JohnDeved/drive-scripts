@@ -17,7 +17,6 @@ from tools.shared import (
     ProgressUI,
     ensure_drive_ready,
     ensure_python_modules,
-    find_games,
     find_games_progressive,
     short,
 )
@@ -113,6 +112,14 @@ class VerifyTool(BaseTool):
         selection = CheckboxListUI(run_label="Verify")
         progress = ProgressUI("Verify NSZ", run_label="Verify", show_bytes=False)
 
+        def load_files() -> None:
+            """Load game files progressively."""
+            selection.load_items_progressive(
+                lambda on_found, on_scan: find_games_progressive(
+                    config.switch_dir, on_found, on_scan
+                )
+            )
+
         def on_run(selected: List[str]) -> None:
             if not selected:
                 return
@@ -129,15 +136,8 @@ class VerifyTool(BaseTool):
             progress.on_complete(on_complete)
             progress.run_loop(worker)
 
-        def on_rescan() -> None:
-            selection.load_items_progressive(
-                lambda batch_cb, scan_cb: find_games_progressive(
-                    config.switch_dir, batch_cb, scan_cb, max_depth=3
-                )
-            )
-
         selection.on_run(on_run)
-        selection.on_rescan(on_rescan)
+        selection.on_rescan(load_files)
 
         # Display UI FIRST, then start scanning
         ui = w.VBox([progress.title, selection.widget, progress.progress_box])
@@ -145,11 +145,7 @@ class VerifyTool(BaseTool):
         display(ui)
 
         # Now start the progressive load (UI is already visible)
-        selection.load_items_progressive(
-            lambda batch_cb, scan_cb: find_games_progressive(
-                config.switch_dir, batch_cb, scan_cb, max_depth=3
-            )
-        )
+        load_files()
 
 
 # Backwards compatibility

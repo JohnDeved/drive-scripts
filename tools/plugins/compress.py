@@ -203,7 +203,7 @@ def _verify_file(
     path: str, on_progress: Callable[[int, int], None]
 ) -> Tuple[bool, str]:
     """Verify compressed file using nsz API."""
-    from nsz.NszDecompressor import VerificationException, verify  # type: ignore
+    from nsz.NszDecompressor import verify  # type: ignore
 
     file_path = Path(path)
     total_size = file_path.stat().st_size
@@ -247,8 +247,6 @@ def _verify_file(
         thread.join()
 
         if error[0]:
-            if isinstance(error[0], VerificationException):
-                return False, str(error[0])
             return False, str(error[0])
 
     return True, ""
@@ -434,15 +432,23 @@ class CompressTool(BaseTool):
         )
         progress.set_confirm_ui(confirm_ui)
 
+        def load_files() -> None:
+            """Load compressible files progressively."""
+            selection.load_items_progressive(
+                lambda on_found, on_scan: find_games_progressive(
+                    config.switch_dir,
+                    on_found,
+                    on_scan,
+                    exts={".nsp", ".xci"},
+                )
+            )
+
         def on_run(selected: List[str]) -> None:
             if not selected:
                 return
             selection.set_running(True)
             verify_chk.disabled = True
             confirm_chk.disabled = True
-
-            # Ensure deps before running (though run_compression loads them too)
-            self.ensure_deps()
 
             def worker() -> None:
                 # Capture stdout/stderr to the log widget to confine spammy output
@@ -459,33 +465,13 @@ class CompressTool(BaseTool):
                 verify_chk.disabled = False
                 confirm_chk.disabled = False
                 progress.finish(success=not progress.had_error())
-                # Refresh list progressively
-                selection.load_items_progressive(
-                    lambda batch_cb, scan_cb: find_games_progressive(
-                        config.switch_dir,
-                        batch_cb,
-                        scan_cb,
-                        exts={".nsp", ".xci"},
-                        max_depth=3,
-                    )
-                )
+                load_files()
 
             progress.on_complete(on_complete)
             progress.run_loop(worker)
 
-        def on_rescan() -> None:
-            selection.load_items_progressive(
-                lambda batch_cb, scan_cb: find_games_progressive(
-                    config.switch_dir,
-                    batch_cb,
-                    scan_cb,
-                    exts={".nsp", ".xci"},
-                    max_depth=3,
-                )
-            )
-
         selection.on_run(on_run)
-        selection.on_rescan(on_rescan)
+        selection.on_rescan(load_files)
 
         # Display UI FIRST, then start scanning
         ui = w.VBox(
@@ -501,12 +487,4 @@ class CompressTool(BaseTool):
         display(ui)
 
         # Now start the progressive load (UI is already visible)
-        selection.load_items_progressive(
-            lambda batch_cb, scan_cb: find_games_progressive(
-                config.switch_dir,
-                batch_cb,
-                scan_cb,
-                exts={".nsp", ".xci"},
-                max_depth=3,
-            )
-        )
+        load_files()

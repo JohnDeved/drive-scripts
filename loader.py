@@ -132,6 +132,9 @@ def main() -> None:
     # Discover available tools
     tools = reload_tools()
 
+    # Import tool switch functions
+    from tools.shared import clear_tool_switch, request_tool_switch
+
     # UI
     title = w.HTML(
         f'<h2>Drive Scripts</h2><small style="color:#666">v{version}</small>'
@@ -143,6 +146,10 @@ def main() -> None:
 
     output = w.Output()
 
+    # Track active button state for cleanup
+    active_button: List[w.Button | None] = [None]
+    button_originals: dict[int, tuple[str, str]] = {}  # id -> (icon, description)
+
     # Create buttons dynamically from discovered tools
     buttons: List[w.Button] = []
     for tool in tools:
@@ -153,16 +160,32 @@ def main() -> None:
             layout=w.Layout(width="180px", height="40px"),
         )
         buttons.append(btn)
+        # Store original state
+        button_originals[id(btn)] = (btn.icon, btn.description)
 
         def make_handler(t: "BaseTool", b: w.Button) -> "Callable[[w.Button], None]":
             """Create click handler with proper closure."""
 
             def handler(_: w.Button) -> None:
+                # Signal any running tool to exit
+                request_tool_switch()
+
+                # Reset previous active button if any
+                if active_button[0] is not None and active_button[0] is not b:
+                    prev = active_button[0]
+                    orig = button_originals.get(id(prev))
+                    if orig:
+                        prev.icon, prev.description = orig
+                    prev.disabled = False
+
+                # Set this button as active
+                active_button[0] = b
                 b.disabled = True
-                original_icon = b.icon
-                original_desc = b.description
                 b.icon = "spinner"
                 b.description = "Loading..."
+
+                # Clear the switch flag before starting new tool
+                clear_tool_switch()
 
                 output.clear_output()
                 with output:
@@ -175,9 +198,13 @@ def main() -> None:
                     except Exception as e:
                         print(f"Error: {e}")
 
-                b.disabled = False
-                b.icon = original_icon
-                b.description = original_desc
+                # Only reset if still the active button (not switched away)
+                if active_button[0] is b:
+                    orig = button_originals.get(id(b))
+                    if orig:
+                        b.icon, b.description = orig
+                    b.disabled = False
+                    active_button[0] = None
 
             return handler
 

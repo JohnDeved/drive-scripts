@@ -24,6 +24,26 @@ from .utils import fmt_bytes, fmt_time, short
 # Debug flag - set to True to see polling messages
 _DEBUG_POLL = False
 
+# Global flag to signal all tools to exit their polling loops
+_tool_switch_requested = False
+
+
+def request_tool_switch() -> None:
+    """Signal all active tools to exit their polling loops."""
+    global _tool_switch_requested
+    _tool_switch_requested = True
+
+
+def clear_tool_switch() -> None:
+    """Clear the tool switch flag after switching."""
+    global _tool_switch_requested
+    _tool_switch_requested = False
+
+
+def is_tool_switch_requested() -> bool:
+    """Check if a tool switch has been requested."""
+    return _tool_switch_requested
+
 
 def _poll_with_events(interval: float = 0.1) -> None:
     """Sleep while processing UI events.
@@ -264,6 +284,10 @@ class ProgressUI:
             for msg in logs:
                 with self.log_out:
                     print(msg)
+
+            # Check for tool switch request - exit immediately
+            if is_tool_switch_requested():
+                return
 
             # Check for confirmation request
             confirm_req = None
@@ -936,6 +960,12 @@ class CheckboxListUI:
             if needs_refresh:
                 self._update_display()
                 self._cb_container.layout.display = "block"
+
+            # Check for tool switch request - exit immediately
+            if is_tool_switch_requested():
+                self._cancel_requested = True
+                self.set_loading(False)
+                return False  # Stop polling
 
             if not running:
                 # Done

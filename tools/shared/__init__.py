@@ -6,7 +6,15 @@ a single location:
     from tools.shared import fmt_bytes, ProgressUI, ensure_drive_ready
 """
 
-from .ui import CheckboxListUI, ProgressUI, RangeSelectionUI, SelectionUI
+from .ui import (
+    CheckboxListUI,
+    ProgressUI,
+    RangeSelectionUI,
+    SelectionUI,
+    clear_tool_switch,
+    is_tool_switch_requested,
+    request_tool_switch,
+)
 from .utils import (
     ProgressCallback,
     copy_with_progress,
@@ -39,4 +47,8 @@ __all__ = [
     "SelectionUI",
     "RangeSelectionUI",
     "CheckboxListUI",
+    # Tool switch
+    "request_tool_switch",
+    "clear_tool_switch",
+    "is_tool_switch_requested",
 ]

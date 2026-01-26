@@ -12,23 +12,49 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 import ipywidgets as w
 from IPython.display import display
 
+from .utils import fmt_bytes, fmt_time, short
 
-def _schedule_callback(delay: float, callback: Callable[[], None]) -> None:
-    """Schedule a callback on the main event loop after delay seconds.
 
-    Works in Colab/Jupyter by using asyncio's event loop.
+async def _poll_loop_async(
+    poll_func: Callable[[], bool], interval: float, name: str = "poll"
+) -> None:
+    """Async polling loop that runs on the main event loop.
+
+    Args:
+        poll_func: Function to call each iteration. Returns True to continue, False to stop.
+        interval: Seconds between polls.
+        name: Name for error logging.
+    """
+    try:
+        while True:
+            try:
+                should_continue = poll_func()
+                if not should_continue:
+                    break
+            except Exception as e:
+                print(f"[{name}] Error in poll: {e}")
+                break
+            await asyncio.sleep(interval)
+    except asyncio.CancelledError:
+        pass  # Task was cancelled, exit gracefully
+
+
+def _start_polling(
+    poll_func: Callable[[], bool], interval: float, name: str = "poll"
+) -> None:
+    """Start async polling loop on the main event loop.
+
+    Args:
+        poll_func: Function to call each iteration. Returns True to continue, False to stop.
+        interval: Seconds between polls.
+        name: Name for error logging.
     """
     try:
         loop = asyncio.get_event_loop()
-        loop.call_later(delay, callback)
-    except RuntimeError:
-        # Fallback: no event loop, use threading.Timer (won't update widgets)
-        t = threading.Timer(delay, callback)
-        t.daemon = True
-        t.start()
-
-
-from .utils import fmt_bytes, fmt_time, short
+        loop.create_task(_poll_loop_async(poll_func, interval, name))
+    except RuntimeError as e:
+        # No event loop - fall back to blocking (shouldn't happen in Colab)
+        print(f"[{name}] Warning: No event loop available: {e}")
 
 
 class ProgressUI:
@@ -228,9 +254,15 @@ class ProgressUI:
         threading.Thread(target=wrapped_worker, daemon=True).start()
 
         format_stats = self._format_stats or self._default_format_stats
+        # Track if we're paused for confirmation dialog
+        paused = [False]
 
-        def poll_update():
-            """Callback to update UI (runs on main event loop)."""
+        def poll_update() -> bool:
+            """Poll callback. Returns True to continue, False to stop."""
+            # If paused for confirmation, don't do anything
+            if paused[0]:
+                return True  # Keep polling but skip update
+
             self._event.clear()
 
             with self._lock:
@@ -258,9 +290,14 @@ class ProgressUI:
                     self._confirm_request = None
 
             if confirm_req:
-                # Show dialog and EXIT - button callback will resume
-                self._show_confirmation_dialog_async(confirm_req, schedule_next)
-                return
+                # Pause polling and show dialog
+                paused[0] = True
+
+                def on_dialog_done():
+                    paused[0] = False
+
+                self._show_confirmation_dialog_async(confirm_req, on_dialog_done)
+                return True  # Keep polling (will skip updates while paused)
 
             if not snap["running"]:
                 # Done - call completion
@@ -268,17 +305,12 @@ class ProgressUI:
                     self.progress.bar_style = "danger"
                 if self._on_complete:
                     self._on_complete()
-                return
+                return False  # Stop polling
 
-            # Schedule next update on main event loop
-            schedule_next()
+            return True  # Continue polling
 
-        def schedule_next():
-            """Schedule next poll update on main event loop."""
-            _schedule_callback(poll_interval, poll_update)
-
-        # Start polling
-        schedule_next()
+        # Start async polling loop
+        _start_polling(poll_update, poll_interval, "ProgressUI")
 
     def _show_confirmation_dialog_async(
         self, data: Dict[str, Any], on_done: Callable[[], None]
@@ -882,8 +914,8 @@ class CheckboxListUI:
                     state["running"] = False
                     state["current_dir"] = ""
 
-        def poll_update():
-            """Callback to update UI (runs on main event loop)."""
+        def poll_update() -> bool:
+            """Poll callback. Returns True to continue, False to stop."""
             # Check for cancellation
             if self._cancel_requested:
                 with state_lock:
@@ -892,7 +924,7 @@ class CheckboxListUI:
                 self.set_loading(False)
                 if on_complete:
                     on_complete()
-                return
+                return False  # Stop polling
 
             with state_lock:
                 state["dots"] = (state["dots"] + 1) % 4
@@ -935,16 +967,15 @@ class CheckboxListUI:
                 self.set_loading(False)
                 if on_complete:
                     on_complete()
-                return
+                return False  # Stop polling
 
-            # Schedule next update on main event loop
-            _schedule_callback(0.2, poll_update)
+            return True  # Continue polling
 
         # Start worker thread
         threading.Thread(target=worker, daemon=True).start()
 
-        # Start polling on main event loop
-        _schedule_callback(0.2, poll_update)
+        # Start async polling loop
+        _start_polling(poll_update, 0.2, "CheckboxListUI")
 
     def _ensure_metadata(self, indices: List[int]) -> None:
         """Fetch metadata for specific indices if missing."""

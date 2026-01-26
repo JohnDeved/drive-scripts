@@ -9,8 +9,13 @@ import sys
 import ipywidgets as w
 from IPython.display import clear_output, display
 
-# Ensure tools package is importable
-REPO_DIR = os.path.dirname(os.path.abspath(__file__))
+# Determine repo directory (works with exec() or direct run)
+if "__file__" in dir():
+    REPO_DIR = os.path.dirname(os.path.abspath(__file__))
+else:
+    # When run via exec(), check common locations
+    REPO_DIR = "/content/drive-scripts"
+
 if REPO_DIR not in sys.path:
     sys.path.insert(0, REPO_DIR)
 

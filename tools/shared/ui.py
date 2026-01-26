@@ -827,37 +827,19 @@ class CheckboxListUI:
 
             # Build status text with animated scanning
             count_str = f"Found {count}" if count > 0 else ""
-            scan_str = f"{left_dots}Scanning{right_dots} |" if current_dir else ""
-            if count_str and scan_str:
-                status = f"{count_str} | {scan_str} {current_dir}"
-            elif count_str:
-                status = count_str
-            else:
-                status = f"{scan_str} {current_dir}"
+            scan_str = f"{left_dots}Scanning{right_dots}"
+            dir_str = f"| {current_dir}" if current_dir else ""
 
-            # Update loading status in header with shiny gradient animation
-            shiny_style = (
-                "<style>"
-                "@keyframes shimmer {"
-                "  0% { background-position: 100% 0; }"
-                "  100% { background-position: -100% 0; }"
-                "}"
-                ".shiny-text {"
-                "  background: linear-gradient(90deg, #888 0%, #888 40%, #ccc 50%, #888 60%, #888 100%);"
-                "  background-size: 300% 100%;"
-                "  -webkit-background-clip: text;"
-                "  background-clip: text;"
-                "  -webkit-text-fill-color: transparent;"
-                "  animation: shimmer 3s infinite linear;"
-                "  white-space: nowrap;"
-                "}"
-                "</style>"
-            )
+            if count_str:
+                status = f"{count_str} | {scan_str} {dir_str}"
+            else:
+                status = f"{scan_str} {dir_str}"
+
+            # Update loading status in header
             self.loading_status.value = (
-                f"{shiny_style}"
-                f"<span style='font-size: 0.85em; margin-left: 10px; white-space: nowrap;'>"
-                f"<i class='fa fa-spinner fa-spin' style='color: #888; margin-right: 6px;'></i>"
-                f"<span class='shiny-text'>{status}</span></span>"
+                f"<span style='color: #888; font-size: 0.85em; margin-left: 10px; white-space: nowrap;'>"
+                f"<i class='fa fa-spinner fa-spin' style='margin-right: 6px;'></i>"
+                f"{status}</span>"
             )
 
             # Refresh the file list display if new items were found

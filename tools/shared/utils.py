@@ -40,19 +40,26 @@ def ensure_bins(bins_to_packages: dict[str, str]) -> None:
         )
 
 
+_MODULES_CHECKED: Set[str] = set()
+
+
 def ensure_python_modules(modules: List[str]) -> None:
     """Install missing Python modules via pip.
 
     Args:
         modules: List of module names to ensure are installed.
     """
-    missing = [m for m in modules if importlib.util.find_spec(m) is None]
+    unchecked = [m for m in modules if m not in _MODULES_CHECKED]
+    if not unchecked:
+        return
+    missing = [m for m in unchecked if importlib.util.find_spec(m) is None]
     if missing:
         subprocess.run(
             ["pip", "install", "-q", *missing],
             capture_output=True,
             check=False,
         )
+    _MODULES_CHECKED.update(modules)
 
 
 def fmt_bytes(b: float) -> str:

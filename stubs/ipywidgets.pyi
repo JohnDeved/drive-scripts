@@ -19,7 +19,12 @@ class Layout:
 
 class Widget:
     layout: Layout
-    def observe(self, handler: Callable[..., None], names: str = ...) -> None: ...
+    def observe(
+        self, handler: Callable[..., None], names: Union[str, List[str]] = ...
+    ) -> None: ...
+    def unobserve(
+        self, handler: Callable[..., None], names: Union[str, List[str]] = ...
+    ) -> None: ...
 
 class HTML(Widget):
     value: str
@@ -57,10 +62,27 @@ class Checkbox(Widget):
     value: bool
     description: str
     disabled: bool
+    indent: bool
     def __init__(
         self,
         value: bool = False,
         description: str = "",
+        indent: bool = True,
+        **kwargs: Any,
+    ) -> None: ...
+
+class Text(Widget):
+    value: str
+    placeholder: str
+    continuous_update: bool
+    description: str
+    def __init__(
+        self,
+        value: str = "",
+        placeholder: str = "",
+        continuous_update: bool = False,
+        description: str = "",
+        layout: Optional[Layout] = None,
         **kwargs: Any,
     ) -> None: ...
 

@@ -497,10 +497,10 @@ class CheckboxListUI:
     """Paginated checkbox list for selecting multiple items.
 
     Attributes:
-        PAGE_SIZE: Number of items per page (default 20).
+        PAGE_SIZE: Number of items per page (default 5).
     """
 
-    PAGE_SIZE: int = 20
+    PAGE_SIZE: int = 5
 
     def __init__(self, run_label: str = "Run") -> None:
         """Initialize checkbox list UI.
@@ -509,6 +509,7 @@ class CheckboxListUI:
             run_label: Label for run button.
         """
         self._items: List[str] = []
+        self._filtered_indices: List[int] = []
         self._selected: Set[int] = set()
         self._page: int = 0
         self._run_label = run_label
@@ -524,6 +525,14 @@ class CheckboxListUI:
         self.btn_all.on_click(self._on_select_all)
         self.btn_none.on_click(self._on_select_none)
         self.btn_invert.on_click(self._on_invert)
+
+        # Search
+        self.search_input = w.Text(
+            placeholder="Type to filter...",
+            continuous_update=True,
+            layout=w.Layout(width="100%"),
+        )
+        self.search_input.observe(self._on_search_change, names="value")
 
         # Checkboxes (fixed pool)
         self._checkboxes = [
@@ -563,12 +572,14 @@ class CheckboxListUI:
         def handler(change: Any) -> None:
             if not change["new"] and not change["old"]:
                 return  # Filter out irrelevant changes
-            global_idx = self._page * self.PAGE_SIZE + index
-            if global_idx < len(self._items):
+
+            idx_in_filtered = self._page * self.PAGE_SIZE + index
+            if idx_in_filtered < len(self._filtered_indices):
+                real_idx = self._filtered_indices[idx_in_filtered]
                 if change["new"]:
-                    self._selected.add(global_idx)
+                    self._selected.add(real_idx)
                 else:
-                    self._selected.discard(global_idx)
+                    self._selected.discard(real_idx)
                 self._update_footer()
 
         return handler
@@ -576,36 +587,58 @@ class CheckboxListUI:
     def set_items(self, items: List[str]) -> None:
         """Set file list and reset selection."""
         self._items = items
+        self._filtered_indices = list(range(len(items)))
         self._selected = set()
         self._page = 0
+        self.search_input.value = ""
         self._update_display()
 
     def get_selected(self) -> List[str]:
         """Return list of selected file paths."""
         return [self._items[i] for i in sorted(self._selected)]
 
+    def _on_search_change(self, change: Any) -> None:
+        """Filter items based on search term."""
+        term = change["new"].lower()
+        if not term:
+            self._filtered_indices = list(range(len(self._items)))
+        else:
+            self._filtered_indices = [
+                i
+                for i, item in enumerate(self._items)
+                if term in os.path.basename(item).lower()
+            ]
+        self._page = 0
+        self._update_display()
+
     def _update_display(self) -> None:
         """Sync widgets with current state."""
         total = len(self._items)
-        self.header.value = f"<b>Files ({total})</b>"
+        filtered_count = len(self._filtered_indices)
+
+        if total == filtered_count:
+            self.header.value = f"<b>Files ({total})</b>"
+        else:
+            self.header.value = f"<b>Files ({filtered_count} / {total})</b>"
 
         # Update checkboxes
         start = self._page * self.PAGE_SIZE
         for i, cb in enumerate(self._checkboxes):
-            idx = start + i
-            if idx < total:
+            idx_in_filtered = start + i
+            if idx_in_filtered < filtered_count:
+                real_idx = self._filtered_indices[idx_in_filtered]
                 cb.layout.display = "flex"
-                cb.description = short(os.path.basename(self._items[idx]), 70)
+                cb.description = short(os.path.basename(self._items[real_idx]), 70)
                 # Unobserve to prevent triggering handler
                 cb.unobserve(self._cb_handlers[i], names="value")
-                cb.value = idx in self._selected
+                cb.value = real_idx in self._selected
                 # Use cached handler
                 cb.observe(self._cb_handlers[i], names="value")
             else:
                 cb.layout.display = "none"
 
         # Update pagination buttons
-        num_pages = (total + self.PAGE_SIZE - 1) // self.PAGE_SIZE
+        num_pages = (filtered_count + self.PAGE_SIZE - 1) // self.PAGE_SIZE
         self.btn_prev.disabled = self._page <= 0
         self.btn_next.disabled = self._page >= num_pages - 1
 
@@ -642,16 +675,19 @@ class CheckboxListUI:
             self._update_display()
 
     def _on_select_all(self, _: Any) -> None:
-        self._selected = set(range(len(self._items)))
+        self._selected.update(self._filtered_indices)
         self._update_display()
 
     def _on_select_none(self, _: Any) -> None:
-        self._selected = set()
+        self._selected.difference_update(self._filtered_indices)
         self._update_display()
 
     def _on_invert(self, _: Any) -> None:
-        all_idx = set(range(len(self._items)))
-        self._selected = all_idx - self._selected
+        for idx in self._filtered_indices:
+            if idx in self._selected:
+                self._selected.remove(idx)
+            else:
+                self._selected.add(idx)
         self._update_display()
 
     def _handle_run(self, _: Any) -> None:
@@ -706,6 +742,7 @@ class CheckboxListUI:
                     [self.header, self.btn_all, self.btn_none, self.btn_invert],
                     layout=w.Layout(align_items="center", margin="0 0 10px 0"),
                 ),
+                self.search_input,
                 self._cb_container,
                 w.HBox(
                     [self._page_container],

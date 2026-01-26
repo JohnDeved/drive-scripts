@@ -1,7 +1,8 @@
 {
   "stubPath": "./stubs",
-  "reportMissingImports": false,
+  "reportMissingImports": "warning",
   "reportMissingModuleSource": false,
   "pythonVersion": "3.10",
-  "typeCheckingMode": "basic"
+  "typeCheckingMode": "basic",
+  "extraPaths": []
 }

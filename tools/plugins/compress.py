@@ -271,7 +271,6 @@ def run_compression(
     progress: ProgressUI,
     verify_after: bool,
     ask_confirm: bool,
-    confirm_callback: Callable[[int, int, str], bool],
 ) -> None:
     """Main compression pipeline."""
     # Stage keys first
@@ -327,7 +326,13 @@ def run_compression(
                 new_size = os.path.getsize(local_output)
 
                 # Block until user confirms
-                keep = confirm_callback(original_size, new_size, basename)
+                keep = progress.request_confirmation(
+                    {
+                        "orig_size": original_size,
+                        "new_size": new_size,
+                        "filename": basename,
+                    }
+                )
 
                 if not keep:
                     progress.log(f"SKIPPED {basename} (User discarded)")
@@ -360,7 +365,17 @@ def run_compression(
                 ),
             )
 
-            # Delete original from Drive
+            # Verify upload before deleting original
+            local_size = os.path.getsize(local_output)
+            if not os.path.exists(drive_output):
+                raise RuntimeError("Upload failed: output file not found on Drive")
+            uploaded_size = os.path.getsize(drive_output)
+            if uploaded_size != local_size:
+                raise RuntimeError(
+                    f"Upload size mismatch: expected {local_size}, got {uploaded_size}"
+                )
+
+            # Safe to delete original from Drive
             if os.path.exists(src):
                 os.remove(src)
 
@@ -370,16 +385,17 @@ def run_compression(
         except Exception as e:
             progress.log(f"FAIL  {basename} - {e}")
             failed_count += 1
-            # "Clean everything" is handled by the finally block + rmtree at start of loop
-            # But we also ensure we don't leave partial uploads on Drive?
-            # copy_with_progress handles file creation, if it fails it might leave partial.
-            # We assume copy_with_progress is atomic enough or overwrite is fine.
+            # Clean up partial upload on Drive (but don't touch original!)
             if os.path.exists(drive_output):
-                # If we failed during upload, try to clean up the partial file
                 try:
                     os.remove(drive_output)
-                except OSError:
-                    pass
+                    progress.log(
+                        f"       Cleaned up partial: {os.path.basename(drive_output)}"
+                    )
+                except OSError as cleanup_err:
+                    progress.log(
+                        f"       Warning: couldn't clean up partial: {cleanup_err}"
+                    )
 
         finally:
             # Cleanup local temp files
@@ -437,55 +453,7 @@ class CompressTool(BaseTool):
                 display="none", border="1px solid #888", padding="10px", margin="10px 0"
             ),
         )
-
-        # Threading event for confirmation
-        confirm_event = threading.Event()
-        confirm_result = [False]
-
-        def show_confirmation(orig_size: int, new_size: int, filename: str) -> bool:
-            """Show confirmation UI and wait for user input."""
-            confirm_event.clear()
-
-            saved = orig_size - new_size
-            percent = (saved / orig_size) * 100 if orig_size > 0 else 0
-
-            html = w.HTML(
-                f"<h4>Confirm Compression</h4>"
-                f"<p><b>File:</b> {filename}</p>"
-                f"<p>Original: {fmt_bytes(orig_size)}<br>"
-                f"Compressed: {fmt_bytes(new_size)}<br>"
-                f"<span style='color: #4caf50'>Saved: {fmt_bytes(saved)} ({percent:.1f}%)</span></p>"
-            )
-
-            btn_keep = w.Button(
-                description="Keep & Upload", button_style="success", icon="check"
-            )
-            btn_discard = w.Button(
-                description="Discard", button_style="danger", icon="times"
-            )
-
-            def on_keep(_):
-                confirm_result[0] = True
-                confirm_event.set()
-
-            def on_discard(_):
-                confirm_result[0] = False
-                confirm_event.set()
-
-            btn_keep.on_click(on_keep)
-            btn_discard.on_click(on_discard)
-
-            confirm_ui.children = [html, w.HBox([btn_keep, btn_discard])]
-            confirm_ui.layout.display = "block"
-
-            # Wait for user
-            confirm_event.wait()
-
-            # Reset UI
-            confirm_ui.layout.display = "none"
-            confirm_ui.children = []
-
-            return confirm_result[0]
+        progress.set_confirm_ui(confirm_ui)
 
         def on_run(selected: List[str]) -> None:
             if not selected:
@@ -505,7 +473,6 @@ class CompressTool(BaseTool):
                         progress,
                         verify_after=verify_chk.value,
                         ask_confirm=confirm_chk.value,
-                        confirm_callback=show_confirmation,
                     )
 
             def on_complete() -> None:

@@ -65,6 +65,12 @@ class ProgressUI:
         self._event = threading.Event()
         self._error: Optional[str] = None  # Track error state
 
+        # Confirmation state (for cross-thread communication)
+        self._confirm_request: Optional[Dict[str, Any]] = None  # Request from worker
+        self._confirm_response: Optional[bool] = None  # Response to worker
+        self._confirm_event = threading.Event()  # Worker waits on this
+        self._confirm_ui: Optional[w.VBox] = None  # UI container (set by caller)
+
         # Widgets
         self.title = w.HTML(f"<h3>{title}</h3>")
         self.step_lbl = w.HTML("")
@@ -226,6 +232,16 @@ class ProgressUI:
                 with self.log_out:
                     print(msg)
 
+            # Check for confirmation request
+            confirm_req = None
+            with self._lock:
+                if self._confirm_request:
+                    confirm_req = self._confirm_request
+                    self._confirm_request = None
+
+            if confirm_req:
+                self._show_confirmation_dialog(confirm_req)
+
             if not snap["running"]:
                 break
 
@@ -239,6 +255,76 @@ class ProgressUI:
     def on_complete(self, func: Callable[[], None]) -> None:
         """Set callback for when run_loop completes."""
         self._on_complete = func
+
+    def set_confirm_ui(self, container: w.VBox) -> None:
+        """Set the VBox container for confirmation dialogs."""
+        self._confirm_ui = container
+
+    def request_confirmation(self, data: Dict[str, Any]) -> bool:
+        """Request confirmation from user (call from worker thread).
+
+        Args:
+            data: Dict with keys 'orig_size', 'new_size', 'filename'
+
+        Returns:
+            True if user confirmed, False if discarded.
+        """
+        with self._lock:
+            self._confirm_request = data
+            self._confirm_response = None
+        self._confirm_event.clear()
+        self._event.set()  # Wake up main loop
+
+        # Wait for response (with timeout to prevent permanent hang)
+        if not self._confirm_event.wait(timeout=300):  # 5 min timeout
+            return False  # Timeout = discard
+
+        with self._lock:
+            return self._confirm_response or False
+
+    def _show_confirmation_dialog(self, data: Dict[str, Any]) -> None:
+        """Show confirmation dialog and wait for user click (main thread only)."""
+        orig_size = data["orig_size"]
+        new_size = data["new_size"]
+        filename = data["filename"]
+        saved = orig_size - new_size
+        percent = (saved / orig_size) * 100 if orig_size > 0 else 0
+
+        html = w.HTML(
+            f"<h4>Confirm Compression</h4>"
+            f"<p><b>File:</b> {filename}</p>"
+            f"<p>Original: {fmt_bytes(orig_size)}<br>"
+            f"Compressed: {fmt_bytes(new_size)}<br>"
+            f"<span style='color: #4caf50'>Saved: {fmt_bytes(saved)} ({percent:.1f}%)</span></p>"
+        )
+
+        btn_keep = w.Button(
+            description="Keep & Upload", button_style="success", icon="check"
+        )
+        btn_discard = w.Button(
+            description="Discard", button_style="danger", icon="times"
+        )
+
+        def on_keep(_):
+            with self._lock:
+                self._confirm_response = True
+            if self._confirm_ui:
+                self._confirm_ui.layout.display = "none"
+            self._confirm_event.set()
+
+        def on_discard(_):
+            with self._lock:
+                self._confirm_response = False
+            if self._confirm_ui:
+                self._confirm_ui.layout.display = "none"
+            self._confirm_event.set()
+
+        btn_keep.on_click(on_keep)
+        btn_discard.on_click(on_discard)
+
+        if self._confirm_ui:
+            self._confirm_ui.children = [html, w.HBox([btn_keep, btn_discard])]
+            self._confirm_ui.layout.display = "block"
 
 
 class SelectionUI:

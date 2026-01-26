@@ -1,6 +1,7 @@
 {
   "venvPath": ".",
   "venv": ".venv",
+  "stubPath": "./stubs",
   "pythonVersion": "3.10",
   "typeCheckingMode": "basic"
 }

@@ -796,7 +796,11 @@ class CheckboxListUI:
         self._selected = set()
         self._file_meta = {}
         self.set_loading(True)
-        self.scanning_path_lbl.value = "<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>Starting...</div>"
+
+        # Shared state for animation
+        scan_complete = threading.Event()
+        current_status = ["Starting..."]
+        status_lock = threading.Lock()
 
         def on_found(path: str):
             self._items.append(path)
@@ -805,41 +809,46 @@ class CheckboxListUI:
             if not term or term in os.path.basename(path).lower():
                 self._filtered_indices.append(real_idx)
 
-            # Update status with file count
-            count = len(self._items)
-            self.scanning_path_lbl.value = (
-                f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
-                f"Found {count} files</div>"
-            )
+            # Update shared status
+            with status_lock:
+                current_status[0] = f"Found {len(self._items)} files"
 
         def on_scanning(dir_name: str):
             from .utils import short
 
-            count = len(self._items)
-            count_str = f"Found {count} | " if count > 0 else ""
-            self.scanning_path_lbl.value = (
-                f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
-                f"{count_str}Scanning: {short(dir_name, 40)}</div>"
-            )
+            with status_lock:
+                count = len(self._items)
+                count_str = f"Found {count} | " if count > 0 else ""
+                current_status[0] = f"{count_str}Scanning: {short(dir_name, 35)}"
 
-        def on_scanning(status: str):
-            from .utils import short
+        def animator():
+            """Animate the status text to show activity."""
+            dots = 0
+            while not scan_complete.is_set():
+                dots = (dots % 3) + 1
+                dot_str = "." * dots + " " * (3 - dots)
 
-            self.scanning_path_lbl.value = (
-                f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
-                f"{short(status, 55)}</div>"
-            )
+                with status_lock:
+                    status = current_status[0]
+
+                self.scanning_path_lbl.value = (
+                    f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
+                    f"{status}{dot_str}</div>"
+                )
+                time.sleep(0.3)
 
         def worker():
             try:
                 loader_func(on_found, on_scanning)
             finally:
+                scan_complete.set()
                 self._update_display()
                 self.set_loading(False)
                 if on_complete:
                     on_complete()
 
         threading.Thread(target=worker, daemon=True).start()
+        threading.Thread(target=animator, daemon=True).start()
 
     def _ensure_metadata(self, indices: List[int]) -> None:
         """Fetch metadata for specific indices if missing."""

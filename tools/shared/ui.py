@@ -28,7 +28,8 @@ def _poll_with_events(interval: float = 0.1) -> None:
     """
     if HAS_UI_POLL:
         with ui_events() as poll:
-            poll(interval)
+            poll(10)  # Process up to 10 pending UI events
+        time.sleep(interval)
     else:
         time.sleep(interval)
 

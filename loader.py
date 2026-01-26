@@ -19,11 +19,37 @@ REPO_DIR = "/content/drive-scripts"
 DRIVE_ROOT = "/content/drive"
 
 
+def cleanup_stale_files() -> None:
+    """Remove stale .py files that conflict with new package structure."""
+    stale_files = [
+        os.path.join(REPO_DIR, "tools", "shared.py"),
+        os.path.join(REPO_DIR, "tools", "ui.py"),
+        os.path.join(REPO_DIR, "tools", "extract.py"),
+        os.path.join(REPO_DIR, "tools", "verify.py"),
+    ]
+    for f in stale_files:
+        if os.path.isfile(f):
+            os.remove(f)
+
+    # Clear Python cache
+    for cache_dir in ["__pycache__", ".pyc"]:
+        cache_path = os.path.join(REPO_DIR, "tools", cache_dir)
+        if os.path.isdir(cache_path):
+            shutil.rmtree(cache_path, ignore_errors=True)
+
+    # Clear tools from sys.modules to force reimport
+    for name in list(sys.modules.keys()):
+        if name.startswith("tools"):
+            del sys.modules[name]
+
+
 def ensure_repo() -> None:
     """Clone or pull the repository with visible output."""
     if os.path.exists(REPO_DIR):
         print("Pulling latest...", flush=True)
         subprocess.run(["git", "-C", REPO_DIR, "pull"], check=False)
+        # Clean up stale files after pull
+        cleanup_stale_files()
     else:
         print("Cloning repository...", flush=True)
         subprocess.run(["git", "clone", "--depth=1", REPO_URL, REPO_DIR], check=False)

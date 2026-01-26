@@ -9,35 +9,47 @@ import sys
 import ipywidgets as w
 from IPython.display import clear_output, display
 
-# Determine repo directory (works with exec() or direct run)
-if "__file__" in dir():
-    REPO_DIR = os.path.dirname(os.path.abspath(__file__))
-else:
-    # When run via exec(), check common locations
-    REPO_DIR = "/content/drive-scripts"
-
-if REPO_DIR not in sys.path:
-    sys.path.insert(0, REPO_DIR)
-
+REPO_URL = "https://github.com/JohnDeved/drive-scripts.git"
+REPO_DIR = "/content/drive-scripts"
 DRIVE_ROOT = "/content/drive"
 
 
+def ensure_repo():
+    """Clone or pull the repository with visible output."""
+    if os.path.exists(REPO_DIR):
+        print("Pulling latest...", flush=True)
+        subprocess.run(["git", "-C", REPO_DIR, "pull"])
+    else:
+        print("Cloning repository...", flush=True)
+        subprocess.run(["git", "clone", "--depth=1", REPO_URL, REPO_DIR])
+
+    # Ensure repo is in path
+    if REPO_DIR not in sys.path:
+        sys.path.insert(0, REPO_DIR)
+
+
 def ensure_drive():
-    """Mount Google Drive if not already mounted."""
+    """Mount Google Drive with status message."""
+    print("Mounting Drive...", end=" ", flush=True)
     if os.path.exists(f"{DRIVE_ROOT}/Shareddrives"):
+        print("already mounted")
         return True
     try:
         from google.colab import drive
 
         drive.mount(DRIVE_ROOT)
-        return os.path.exists(f"{DRIVE_ROOT}/Shareddrives")
+        ok = os.path.exists(f"{DRIVE_ROOT}/Shareddrives")
+        print("done" if ok else "failed")
+        return ok
     except ImportError:
-        print("Warning: Not running in Colab, Drive mount skipped.")
+        print("skipped (not in Colab)")
         return False
 
 
 def ensure_deps():
     """Install apt packages and Python modules."""
+    print("Installing dependencies...", end=" ", flush=True)
+
     # apt packages (silent install)
     bins = {"7z": "p7zip-full", "unrar": "unrar", "unzip": "unzip"}
     missing = [pkg for cmd, pkg in bins.items() if shutil.which(cmd) is None]
@@ -48,6 +60,8 @@ def ensure_deps():
     req_file = os.path.join(REPO_DIR, "requirements.txt")
     if os.path.exists(req_file):
         subprocess.run(["pip", "install", "-q", "-r", req_file], capture_output=True)
+
+    print("done")
 
 
 def get_version():
@@ -61,12 +75,15 @@ def get_version():
 
 
 def main():
-    """Display tool selection menu."""
-    clear_output(wait=True)
-
-    # Setup
+    """Bootstrap and display tool selection menu."""
+    # Setup with visible logging
+    ensure_repo()
     drive_ok = ensure_drive()
     ensure_deps()
+
+    # Clear setup logs and show clean UI
+    clear_output(wait=True)
+
     version = get_version()
 
     # UI

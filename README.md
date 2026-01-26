@@ -14,26 +14,7 @@ Colab tools for managing Nintendo Switch files on Google Drive.
 3. Paste this code in a cell and run it:
 
 ```python
-# Drive Scripts Loader
-import subprocess, sys, os
-
-# Mount Drive
-if not os.path.exists('/content/drive/Shareddrives'):
-    from google.colab import drive
-    drive.mount('/content/drive')
-
-# Clone or update repo
-REPO = '/content/drive-scripts'
-URL = 'https://github.com/JohnDeved/drive-scripts.git'
-
-if os.path.exists(REPO):
-    subprocess.run(['git', '-C', REPO, 'pull', '-q'])
-else:
-    subprocess.run(['git', 'clone', '-q', URL, REPO])
-
-# Run
-sys.path.insert(0, REPO)
-exec(open(f'{REPO}/loader.py').read())
+exec(__import__('urllib.request').request.urlopen('https://raw.githubusercontent.com/JohnDeved/drive-scripts/main/loader.py').read().decode())
 ```
 
 ## Expected Directory Structure

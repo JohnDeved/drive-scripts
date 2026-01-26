@@ -618,23 +618,22 @@ class CheckboxListUI:
         self.btn_invert.on_click(self._on_invert)
 
         # Loading overlay
-        self.loading_lbl = w.HTML(
-            "<div style='padding: 10px 0 0 0; text-align: center; color: #666;'>"
-            "<i class='fa fa-spinner fa-spin fa-2x'></i><br><br>"
-            "Scanning for files...</div>"
+        self.spinner = w.HTML(
+            "<i class='fa fa-spinner fa-spin' style='color: #666; margin-right: 8px;'></i>"
         )
-        self.scanning_path_lbl = w.HTML(
-            "",
+        self.loading_text = w.HTML(
+            "<span style='color: #666; font-weight: 500;'>Scanning for files...</span>"
+        )
+        self.scanning_path_lbl = w.HTML("")
+        self.loading_box = w.HBox(
+            [self.spinner, self.loading_text, self.scanning_path_lbl],
             layout=w.Layout(
-                padding="0 10px 10px 10px",
-                text_align="center",
-                opacity="0.6",
-                font_size="0.9em",
+                display="none",
+                width="100%",
+                justify_content="center",
+                align_items="center",
+                padding="20px 0",
             ),
-        )
-        self.loading_box = w.VBox(
-            [self.loading_lbl, self.scanning_path_lbl],
-            layout=w.Layout(display="none", width="100%"),
         )
 
         # Search
@@ -748,7 +747,7 @@ class CheckboxListUI:
     def set_loading(self, loading: bool) -> None:
         """Show/hide loading spinner."""
         self._is_loading = loading
-        self.loading_box.layout.display = "block" if loading else "none"
+        self.loading_box.layout.display = "flex" if loading else "none"
         self._cb_container.layout.display = (
             "none" if loading and not self._items else "block"
         )
@@ -765,13 +764,15 @@ class CheckboxListUI:
 
         display_path = path
         if path.startswith("/content/drive/Shareddrives/"):
-            display_path = path.replace(
-                "/content/drive/Shareddrives/", "Shared Drives/"
-            )
+            display_path = path.replace("/content/drive/Shareddrives/", "")
         elif path.startswith("/content/drive/MyDrive/"):
-            display_path = path.replace("/content/drive/MyDrive/", "My Drive/")
+            display_path = path.replace("/content/drive/MyDrive/", "")
 
-        self.scanning_path_lbl.value = f"<i>Scanning: {short(display_path, 80)}</i>"
+        # Use a lighter grey and smaller font, fit next to the text
+        self.scanning_path_lbl.value = (
+            f"<span style='color: #999; font-size: 0.85em; margin-left: 8px;'>"
+            f"({short(display_path, 50)})</span>"
+        )
 
     def load_items_async(
         self,

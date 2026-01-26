@@ -14,6 +14,7 @@ exec(__import__('urllib.request').request.urlopen('https://raw.githubusercontent
 |------|-------------|
 | **Extract Archives** | Extract ZIP/7z/RAR with nested archive support, upload back to Drive |
 | **Verify NSZ** | Batch verify NSP/NSZ/XCI/XCZ files using `nsz --quick-verify` |
+| **Compress NSZ** | Batch compress NSP/XCI to NSZ/XCZ (Solid/Block), verify, and replace original |
 
 ## Setup
 

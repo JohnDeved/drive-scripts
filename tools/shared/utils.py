@@ -177,7 +177,8 @@ def find_games_progressive(
         else:
             name_args.extend(["-iname", f"*{ext}"])
 
-    cmd = [
+    # Use stdbuf to force line buffering if available, otherwise just find
+    find_cmd = [
         "find",
         root,
         "-maxdepth",
@@ -187,7 +188,14 @@ def find_games_progressive(
         "(",
         *name_args,
         ")",
+        "-print",
     ]
+
+    # Try with stdbuf for unbuffered output
+    if shutil.which("stdbuf"):
+        cmd = ["stdbuf", "-oL"] + find_cmd
+    else:
+        cmd = find_cmd
 
     all_found: List[str] = []
 
@@ -195,16 +203,20 @@ def find_games_progressive(
         if on_scanning:
             on_scanning(root)
 
-        # Use Popen to stream results line-by-line
+        # Use Popen with unbuffered reading
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
+            bufsize=1,  # Line buffered
         )
 
         if proc.stdout:
-            for line in proc.stdout:
+            while True:
+                line = proc.stdout.readline()
+                if not line:
+                    break
                 path = line.rstrip("\n")
                 if path:
                     all_found.append(path)

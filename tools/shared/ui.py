@@ -813,45 +813,88 @@ class CheckboxListUI:
         self._file_meta = {}
         self.set_loading(True)
 
-        # Batch updates for efficiency
+        # Shared state between threads
         pending_items: List[str] = []
-        last_update = [time.time()]
+        items_lock = threading.Lock()
+        scan_done = threading.Event()
+        last_path = [""]
 
-        def flush_pending():
-            if pending_items:
-                self._items.extend(pending_items)
+        def on_found(path: str):
+            with items_lock:
+                pending_items.append(path)
+                last_path[0] = path
+
+        def on_scanning(status: str):
+            with items_lock:
+                last_path[0] = status
+
+        def scanner():
+            try:
+                loader_func(on_found, on_scanning)
+            finally:
+                scan_done.set()
+
+        def ui_updater():
+            """Periodically flush pending items to UI."""
+            dots = 0
+            while not scan_done.is_set():
+                time.sleep(0.2)
+                dots = (dots + 1) % 4
+
+                with items_lock:
+                    new_items = list(pending_items)
+                    pending_items.clear()
+                    current_path = last_path[0]
+
+                if new_items:
+                    start_idx = len(self._items)
+                    self._items.extend(new_items)
+                    term = self.search_input.value.lower()
+                    for i, item in enumerate(new_items):
+                        real_idx = start_idx + i
+                        if not term or term in os.path.basename(item).lower():
+                            self._filtered_indices.append(real_idx)
+                    self._update_display()
+
+                # Update scanning indicator with animation
+                count = len(self._items)
+                dot_str = "." * (dots + 1)
+                if current_path:
+                    filename = os.path.basename(current_path)
+                    from .utils import short
+
+                    self.scanning_path_lbl.value = (
+                        f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
+                        f"Found {count}{dot_str} {short(filename, 40)}</div>"
+                    )
+                else:
+                    self.scanning_path_lbl.value = (
+                        f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
+                        f"Searching{dot_str}</div>"
+                    )
+
+            # Final flush
+            with items_lock:
+                new_items = list(pending_items)
+                pending_items.clear()
+
+            if new_items:
+                start_idx = len(self._items)
+                self._items.extend(new_items)
                 term = self.search_input.value.lower()
-                start_idx = len(self._items) - len(pending_items)
-                for i, item in enumerate(pending_items):
+                for i, item in enumerate(new_items):
                     real_idx = start_idx + i
                     if not term or term in os.path.basename(item).lower():
                         self._filtered_indices.append(real_idx)
-                pending_items.clear()
                 self._update_display()
 
-        def on_found(path: str):
-            pending_items.append(path)
-            # Update scanning path to show latest file found
-            self.set_scanning_path(path)
-            # Flush every 100ms or every 10 items
-            now = time.time()
-            if now - last_update[0] > 0.1 or len(pending_items) >= 10:
-                flush_pending()
-                last_update[0] = now
+            self.set_loading(False)
+            if on_complete:
+                on_complete()
 
-        def on_scanning(status: str):
-            self.set_scanning_path(status)
-
-        def worker():
-            try:
-                loader_func(on_found, on_scanning)
-                flush_pending()  # Final flush
-            finally:
-                self.set_loading(False)
-                if on_complete:
-                    on_complete()
-
-        threading.Thread(target=worker, daemon=True).start()
+        # Start both threads
+        threading.Thread(target=scanner, daemon=True).start()
+        threading.Thread(target=ui_updater, daemon=True).start()
 
     def _ensure_metadata(self, indices: List[int]) -> None:
         """Fetch metadata for specific indices if missing."""

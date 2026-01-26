@@ -15,6 +15,8 @@ exec(__import__('urllib.request').request.urlopen('https://raw.githubusercontent
 | **Extract Archives** | Extract ZIP/7z/RAR with nested archive support, upload back to Drive |
 | **Verify NSZ** | Batch verify NSP/NSZ/XCI/XCZ files using `nsz --quick-verify` |
 | **Compress NSZ** | Batch compress NSP/XCI to NSZ/XCZ (Solid/Block), verify, and replace original |
+| **Decompress NSZ** | Batch decompress NSZ/XCZ to NSP/XCI, verify, and replace original |
+| **Organize & Rename** | Rename files based on TitleDB (e.g., `Name [TitleID] [vVersion]`) |
 
 ## Setup
 

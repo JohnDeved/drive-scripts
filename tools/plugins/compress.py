@@ -33,8 +33,11 @@ def _load_compress_deps() -> None:
     # Import Keys to ensure they are loaded (requires prod.keys in ~/.switch)
     from nsz.nut import Keys  # type: ignore
 
-    if not Keys.keys_loaded:
-        Keys.load_default()
+    # load_default() returns True if keys loaded successfully, False otherwise
+    if not Keys.load_default():
+        raise RuntimeError(
+            f"Failed to load Switch keys. Ensure prod.keys exists in {config.keys_dir}/"
+        )
 
 
 def _stage_keys() -> Tuple[bool, str]:

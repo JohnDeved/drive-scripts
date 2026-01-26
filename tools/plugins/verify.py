@@ -125,14 +125,12 @@ class VerifyTool(BaseTool):
                 return
             self.ensure_deps()
             selection.set_running(True)
-            selection.hide()
 
             def worker() -> None:
                 run_verification(selected, progress)
 
             def on_complete() -> None:
                 selection.set_running(False)
-                selection.show()
                 progress.finish(success=not progress.had_error())
 
             progress.on_complete(on_complete)

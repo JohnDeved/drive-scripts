@@ -448,7 +448,6 @@ class CompressTool(BaseTool):
             if not selected:
                 return
             selection.set_running(True)
-            selection.hide()
             verify_chk.disabled = True
             confirm_chk.disabled = True
 
@@ -464,7 +463,6 @@ class CompressTool(BaseTool):
 
             def on_complete() -> None:
                 selection.set_running(False)
-                selection.show()
                 verify_chk.disabled = False
                 confirm_chk.disabled = False
                 progress.finish(success=not progress.had_error())

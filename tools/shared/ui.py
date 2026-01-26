@@ -849,7 +849,7 @@ class CheckboxListUI:
                 "  -webkit-background-clip: text;"
                 "  background-clip: text;"
                 "  -webkit-text-fill-color: transparent;"
-                "  animation: shimmer 2s infinite linear;"
+                "  animation: shimmer 4s infinite linear;"
                 "}"
                 "</style>"
             )

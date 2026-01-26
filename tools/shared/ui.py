@@ -166,7 +166,8 @@ class ProgressUI:
             eta = (total - done) / rate if rate > 0 else 0
             return (
                 f"{fmt_bytes(done)} / {fmt_bytes(total)} | "
-                f"{fmt_bytes(rate)}/s | ETA {fmt_time(eta)}"
+                f"{fmt_bytes(rate)}/s | ETA {fmt_time(eta)} | "
+                f"Runtime {fmt_time(elapsed)}"
             )
         else:
             rate = done / elapsed if elapsed > 0 else 0

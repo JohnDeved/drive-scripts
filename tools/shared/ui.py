@@ -608,7 +608,10 @@ class CheckboxListUI:
         self._is_loading: bool = False
 
         # Header
-        self.header = w.HTML("Files (0)")
+        self.header = w.HTML(
+            "<b>Files (0)</b>",
+            layout=w.Layout(margin="0 0 0 10px"),
+        )
         self.btn_all = w.Button(description="All", layout=w.Layout(width="60px"))
         self.btn_none = w.Button(description="None", layout=w.Layout(width="60px"))
         self.btn_invert = w.Button(description="Invert", layout=w.Layout(width="70px"))
@@ -617,30 +620,8 @@ class CheckboxListUI:
         self.btn_none.on_click(self._on_select_none)
         self.btn_invert.on_click(self._on_invert)
 
-        # Loading overlay
-        self.spinner = w.HTML(
-            "<i class='fa fa-spinner fa-spin' style='color: #999; margin-right: 8px;'></i>"
-        )
-        self.loading_text = w.HTML(
-            "<span style='color: #999; font-weight: 500;'>Scanning for files...</span>"
-        )
-        self.scanning_path_lbl = w.HTML("")
-        self.loading_box = w.VBox(
-            [
-                w.HBox(
-                    [self.spinner, self.loading_text],
-                    layout=w.Layout(justify_content="center", align_items="center"),
-                ),
-                self.scanning_path_lbl,
-            ],
-            layout=w.Layout(
-                display="none",
-                width="100%",
-                justify_content="center",
-                align_items="center",
-                padding="10px 0",
-            ),
-        )
+        # Loading indicator (inline with header)
+        self.loading_status = w.HTML("")
 
         # Search
         self.search_input = w.Text(
@@ -739,7 +720,6 @@ class CheckboxListUI:
     def set_loading(self, loading: bool) -> None:
         """Show/hide loading spinner."""
         self._is_loading = loading
-        self.loading_box.layout.display = "flex" if loading else "none"
         # Always show the checkbox container if we have items
         if self._items:
             self._cb_container.layout.display = "block"
@@ -749,7 +729,7 @@ class CheckboxListUI:
         self.btn_rescan.disabled = loading
         self.search_input.disabled = loading
         if not loading:
-            self.scanning_path_lbl.value = ""
+            self.loading_status.value = ""
 
     def load_items_async(
         self,
@@ -845,10 +825,11 @@ class CheckboxListUI:
                 needs_refresh = state["needs_refresh"]
                 state["needs_refresh"] = False
 
-            # Update loading status
-            self.scanning_path_lbl.value = (
-                f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
-                f"{status}{dot_str}</div>"
+            # Update loading status in header
+            self.loading_status.value = (
+                f"<span style='color: #888; font-size: 0.85em; margin-left: 10px;'>"
+                f"<i class='fa fa-spinner fa-spin' style='margin-right: 6px;'></i>"
+                f"{status}{dot_str}</span>"
             )
 
             # Refresh the file list display if new items were found
@@ -1049,11 +1030,16 @@ class CheckboxListUI:
         return w.VBox(
             [
                 w.HBox(
-                    [self.header, self.btn_all, self.btn_none, self.btn_invert],
+                    [
+                        self.btn_all,
+                        self.btn_none,
+                        self.btn_invert,
+                        self.header,
+                        self.loading_status,
+                    ],
                     layout=w.Layout(align_items="center", margin="0 0 10px 0"),
                 ),
                 self.search_input,
-                self.loading_box,
                 self._cb_container,
                 w.HBox(
                     [self._page_container],

@@ -740,9 +740,11 @@ class CheckboxListUI:
         """Show/hide loading spinner."""
         self._is_loading = loading
         self.loading_box.layout.display = "flex" if loading else "none"
-        self._cb_container.layout.display = (
-            "none" if loading and not self._items else "block"
-        )
+        # Always show the checkbox container if we have items
+        if self._items:
+            self._cb_container.layout.display = "block"
+        else:
+            self._cb_container.layout.display = "none" if loading else "block"
         self.btn_run.disabled = loading or len(self._selected) == 0
         self.btn_rescan.disabled = loading
         self.search_input.disabled = loading
@@ -798,7 +800,7 @@ class CheckboxListUI:
         self.set_loading(True)
 
         # Shared state between worker and main thread
-        state = {"status": "Starting", "running": True}
+        state = {"status": "Starting", "running": True, "needs_refresh": False}
         state_lock = threading.Lock()
 
         def on_found(path: str):
@@ -810,6 +812,7 @@ class CheckboxListUI:
 
             with state_lock:
                 state["status"] = f"Found {len(self._items)} files"
+                state["needs_refresh"] = True
 
         def on_scanning(dir_name: str):
             from .utils import short
@@ -839,17 +842,25 @@ class CheckboxListUI:
             with state_lock:
                 status = state["status"]
                 running = state["running"]
+                needs_refresh = state["needs_refresh"]
+                state["needs_refresh"] = False
 
-            # Update widget from main thread
+            # Update loading status
             self.scanning_path_lbl.value = (
                 f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
                 f"{status}{dot_str}</div>"
             )
 
+            # Refresh the file list display if new items were found
+            if needs_refresh:
+                self._update_display()
+                # Show the checkbox container while still loading
+                self._cb_container.layout.display = "block"
+
             if not running:
                 break
 
-        # Done - update display and hide loading
+        # Done - final update and hide loading
         self._update_display()
         self.set_loading(False)
         if on_complete:

@@ -26,6 +26,7 @@ Thumbs.db
 # Local testing
 .env
 *.log
+.ruff_cache/
 
 # Virtual Environment
 .venv/

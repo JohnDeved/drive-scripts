@@ -211,55 +211,105 @@ class ProgressUI:
         threading.Thread(target=wrapped_worker, daemon=True).start()
 
         format_stats = self._format_stats or self._default_format_stats
-        waiting_for_confirm = False
 
-        while True:
-            # Use shorter timeout when waiting for confirmation to allow widget callbacks
-            timeout = 0.05 if waiting_for_confirm else poll_interval
-            self._event.wait(timeout=timeout)
-            self._event.clear()
+        def poll_loop():
+            """Poll for updates. Returns True if should continue, False if waiting for confirm."""
+            while True:
+                self._event.wait(timeout=poll_interval)
+                self._event.clear()
 
+                with self._lock:
+                    snap = dict(self._state)
+                    logs: List[str] = self._state["logs"]
+                    self._state["logs"] = []
+
+                self.step_lbl.value = f"<b>{snap['step']}</b>"
+                self.file_lbl.value = short(snap["file"], 70)
+                self.progress.max = max(snap["total"], 1)
+                self.progress.value = snap["done"]
+
+                elapsed = time.monotonic() - snap["start"]
+                self.stats_lbl.value = format_stats(snap, elapsed)
+
+                for msg in logs:
+                    with self.log_out:
+                        print(msg)
+
+                # Check for confirmation request
+                confirm_req = None
+                with self._lock:
+                    if self._confirm_request:
+                        confirm_req = self._confirm_request
+                        self._confirm_request = None
+
+                if confirm_req:
+                    # Show dialog and EXIT the loop to allow widget events
+                    self._show_confirmation_dialog_async(confirm_req, resume_loop)
+                    return  # Exit loop - button callback will resume
+
+                if not snap["running"]:
+                    # Done - call completion
+                    if self._error:
+                        self.progress.bar_style = "danger"
+                    if self._on_complete:
+                        self._on_complete()
+                    return
+
+        def resume_loop():
+            """Resume polling after confirmation."""
+            poll_loop()
+
+        poll_loop()
+
+    def _show_confirmation_dialog_async(
+        self, data: Dict[str, Any], on_done: Callable[[], None]
+    ) -> None:
+        """Show confirmation dialog with async button handling."""
+        orig_size = data["orig_size"]
+        new_size = data["new_size"]
+        filename = data["filename"]
+        saved = orig_size - new_size
+        percent = (saved / orig_size) * 100 if orig_size > 0 else 0
+
+        html = w.HTML(
+            f"<h4>Confirm Compression</h4>"
+            f"<p><b>File:</b> {filename}</p>"
+            f"<p>Original: {fmt_bytes(orig_size)}<br>"
+            f"Compressed: {fmt_bytes(new_size)}<br>"
+            f"<span style='color: #4caf50'>Saved: {fmt_bytes(saved)} ({percent:.1f}%)</span></p>"
+        )
+
+        btn_keep = w.Button(
+            description="Keep & Upload", button_style="success", icon="check"
+        )
+        btn_discard = w.Button(
+            description="Discard", button_style="danger", icon="times"
+        )
+
+        def on_keep(_):
             with self._lock:
-                snap = dict(self._state)
-                logs: List[str] = self._state["logs"]
-                self._state["logs"] = []
+                self._confirm_response = True
+            if self._confirm_ui:
+                self._confirm_ui.layout.display = "none"
+                self._confirm_ui.children = []
+            self._confirm_event.set()
+            on_done()  # Resume the loop
 
-            self.step_lbl.value = f"<b>{snap['step']}</b>"
-            self.file_lbl.value = short(snap["file"], 70)
-            self.progress.max = max(snap["total"], 1)
-            self.progress.value = snap["done"]
-
-            elapsed = time.monotonic() - snap["start"]
-            self.stats_lbl.value = format_stats(snap, elapsed)
-
-            for msg in logs:
-                with self.log_out:
-                    print(msg)
-
-            # Check for confirmation request
-            confirm_req = None
+        def on_discard(_):
             with self._lock:
-                if self._confirm_request:
-                    confirm_req = self._confirm_request
-                    self._confirm_request = None
+                self._confirm_response = False
+            if self._confirm_ui:
+                self._confirm_ui.layout.display = "none"
+                self._confirm_ui.children = []
+            self._confirm_event.set()
+            on_done()  # Resume the loop
 
-            if confirm_req:
-                self._show_confirmation_dialog(confirm_req)
-                waiting_for_confirm = True
+        btn_keep.on_click(on_keep)
+        btn_discard.on_click(on_discard)
 
-            # Check if confirmation was answered
-            if waiting_for_confirm and self._confirm_event.is_set():
-                waiting_for_confirm = False
-
-            if not snap["running"]:
-                break
-
-        # Show error state visually before calling on_complete
-        if self._error:
-            self.progress.bar_style = "danger"
-
-        if self._on_complete:
-            self._on_complete()
+        if self._confirm_ui:
+            self._confirm_ui.children = [html, w.HBox([btn_keep, btn_discard])]
+            self._confirm_ui.layout.display = "block"
 
     def on_complete(self, func: Callable[[], None]) -> None:
         """Set callback for when run_loop completes."""
@@ -290,52 +340,6 @@ class ProgressUI:
 
         with self._lock:
             return self._confirm_response or False
-
-    def _show_confirmation_dialog(self, data: Dict[str, Any]) -> None:
-        """Show confirmation dialog and wait for user click (main thread only)."""
-        orig_size = data["orig_size"]
-        new_size = data["new_size"]
-        filename = data["filename"]
-        saved = orig_size - new_size
-        percent = (saved / orig_size) * 100 if orig_size > 0 else 0
-
-        html = w.HTML(
-            f"<h4>Confirm Compression</h4>"
-            f"<p><b>File:</b> {filename}</p>"
-            f"<p>Original: {fmt_bytes(orig_size)}<br>"
-            f"Compressed: {fmt_bytes(new_size)}<br>"
-            f"<span style='color: #4caf50'>Saved: {fmt_bytes(saved)} ({percent:.1f}%)</span></p>"
-        )
-
-        btn_keep = w.Button(
-            description="Keep & Upload", button_style="success", icon="check"
-        )
-        btn_discard = w.Button(
-            description="Discard", button_style="danger", icon="times"
-        )
-
-        def on_keep(_):
-            with self._lock:
-                self._confirm_response = True
-            if self._confirm_ui:
-                self._confirm_ui.layout.display = "none"
-                self._confirm_ui.children = []
-            self._confirm_event.set()
-
-        def on_discard(_):
-            with self._lock:
-                self._confirm_response = False
-            if self._confirm_ui:
-                self._confirm_ui.layout.display = "none"
-                self._confirm_ui.children = []
-            self._confirm_event.set()
-
-        btn_keep.on_click(on_keep)
-        btn_discard.on_click(on_discard)
-
-        if self._confirm_ui:
-            self._confirm_ui.children = [html, w.HBox([btn_keep, btn_discard])]
-            self._confirm_ui.layout.display = "block"
 
 
 class SelectionUI:

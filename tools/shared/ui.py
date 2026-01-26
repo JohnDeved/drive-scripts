@@ -779,7 +779,7 @@ class CheckboxListUI:
         ],
         on_complete: Optional[Callable] = None,
     ) -> None:
-        """Load items progressively with a blocking polling loop.
+        """Load items progressively in background (non-blocking).
 
         Args:
             loader_func: Function taking on_found(path), on_scanning(path),
@@ -795,8 +795,13 @@ class CheckboxListUI:
         self._file_meta = {}
         self.set_loading(True)
 
-        # Shared state between worker and main thread
-        state = {"current_dir": "", "running": True, "needs_refresh": False}
+        # Shared state between worker and UI updates
+        state = {
+            "current_dir": "",
+            "running": True,
+            "needs_refresh": False,
+            "dots": 0,
+        }
         state_lock = threading.Lock()
 
         def on_found(path: str):
@@ -818,41 +823,33 @@ class CheckboxListUI:
         def is_cancelled() -> bool:
             return self._cancel_requested
 
-        def worker():
-            try:
-                loader_func(on_found, on_scanning, is_cancelled)
-            finally:
-                with state_lock:
-                    state["running"] = False
-                    state["current_dir"] = ""
-
-        # Start worker thread
-        threading.Thread(target=worker, daemon=True).start()
-
-        # Main thread polling loop - updates widgets properly
-        dots = 0
-        while True:
-            time.sleep(0.3)
-
-            # Check for cancellation
-            if self._cancel_requested:
-                with state_lock:
-                    state["running"] = False
-                break
-
-            dots = (dots + 1) % 4
-            # Animate dots: .Scanning, ..Scanning., ...Scanning.., Scanning...
-            left_dots = "." * dots
-            right_dots = "." * (3 - dots)
-
+        def update_ui():
+            """Update UI from main thread - called by timer."""
             with state_lock:
                 count = len(self._items)
                 current_dir = state.get("current_dir", "")
                 running = state["running"]
                 needs_refresh = state["needs_refresh"]
                 state["needs_refresh"] = False
+                state["dots"] = (state["dots"] + 1) % 4
+                dots = state["dots"]
 
-            # Build status text with animated scanning
+            if self._cancel_requested and running:
+                # Still waiting for worker to stop
+                pass
+            elif not running:
+                # Worker finished
+                self._update_display()
+                self.set_loading(False)
+                if on_complete:
+                    on_complete()
+                return  # Stop timer
+
+            # Animate dots
+            left_dots = "." * dots
+            right_dots = "." * (3 - dots)
+
+            # Build status text
             count_str = f"Found {count}" if count > 0 else ""
             scan_str = f"{left_dots}Scanning{right_dots}"
             dir_str = f"| {current_dir}" if current_dir else ""
@@ -872,17 +869,24 @@ class CheckboxListUI:
             # Refresh the file list display if new items were found
             if needs_refresh:
                 self._update_display()
-                # Show the checkbox container while still loading
                 self._cb_container.layout.display = "block"
 
-            if not running:
-                break
+            # Schedule next update
+            threading.Timer(0.3, update_ui).start()
 
-        # Done - final update and hide loading
-        self._update_display()
-        self.set_loading(False)
-        if on_complete:
-            on_complete()
+        def worker():
+            try:
+                loader_func(on_found, on_scanning, is_cancelled)
+            finally:
+                with state_lock:
+                    state["running"] = False
+                    state["current_dir"] = ""
+
+        # Start worker thread
+        threading.Thread(target=worker, daemon=True).start()
+
+        # Start UI update timer
+        threading.Timer(0.3, update_ui).start()
 
     def _ensure_metadata(self, indices: List[int]) -> None:
         """Fetch metadata for specific indices if missing."""

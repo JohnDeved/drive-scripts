@@ -6,7 +6,7 @@ a single location:
     from tools.shared import fmt_bytes, ProgressUI, ensure_drive_ready
 """
 
-from .ui import ProgressUI, RangeSelectionUI, SelectionUI
+from .ui import CheckboxListUI, ProgressUI, RangeSelectionUI, SelectionUI
 from .utils import (
     ProgressCallback,
     copy_with_progress,
@@ -36,4 +36,5 @@ __all__ = [
     "ProgressUI",
     "SelectionUI",
     "RangeSelectionUI",
+    "CheckboxListUI",
 ]

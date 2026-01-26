@@ -1,20 +1,20 @@
-"""Verify Tool: Verify NSP/NSZ/XCI/XCZ files using NSZ quick verify."""
+"""Verify Tool: Verify game files using NSZ quick verify."""
 
 from __future__ import annotations
 
 import os
 import shutil
 import subprocess
-from typing import Any, Dict, List, Tuple
+from typing import List, Tuple
 
 import ipywidgets as w
-from IPython.display import display
+from IPython.display import clear_output, display
 
 from config import config
 from tools.base import BaseTool
 from tools.shared import (
+    CheckboxListUI,
     ProgressUI,
-    RangeSelectionUI,
     ensure_drive_ready,
     ensure_python_modules,
     find_games,
@@ -23,146 +23,71 @@ from tools.shared import (
 
 KEY_FILES = ["prod.keys", "title.keys", "keys.txt"]
 
-_DEPS_READY = False
 
+def _stage_keys() -> Tuple[bool, str]:
+    """Copy keys from Drive to ~/.switch.
 
-def _ensure_nsz_deps() -> None:
-    """Lazy-load NSZ dependency."""
-    global _DEPS_READY
-    if _DEPS_READY:
-        return
-    ensure_python_modules(["nsz"])
-    _DEPS_READY = True
-
-
-def _short_msg(msg: str, n: int = 120) -> str:
-    """Truncate message with ellipsis."""
-    return msg[: n - 3] + "..." if msg and len(msg) > n else msg
-
-
-def _first_line(text: str) -> str:
-    """Get first non-empty line from text."""
-    if not text:
-        return ""
-    for line in text.splitlines():
-        line = line.strip()
-        if line:
-            return line
-    return ""
-
-
-def _extract_error_message(result: subprocess.CompletedProcess[str]) -> str:
-    """Extract meaningful error message from subprocess result."""
-    text = result.stderr or result.stdout or ""
-    if not text:
-        return ""
-    if "Verification detected hash mismatch!" in text:
-        return "Verification detected hash mismatch!"
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    if not lines:
-        return ""
-    for line in reversed(lines):
-        if "VerificationException:" in line:
-            msg = line.split("VerificationException:", 1)[1].strip()
-            return msg or line
-    for line in reversed(lines):
-        if "Exception:" in line:
-            msg = line.split("Exception:", 1)[1].strip()
-            return msg or line
-    return lines[-1]
-
-
-def _key_status() -> Tuple[bool, str]:
-    """Check and stage key files from Drive to local."""
+    Returns:
+        Tuple of (success, path_to_prod_keys).
+    """
     os.makedirs(config.local_keys_dir, exist_ok=True)
     for name in KEY_FILES:
-        drive_path = os.path.join(config.keys_dir, name)
-        local_path = os.path.join(config.local_keys_dir, name)
-        if os.path.exists(drive_path):
-            shutil.copy2(drive_path, local_path)
-    prod_path = os.path.join(config.local_keys_dir, "prod.keys")
-    prod_ok = os.path.exists(prod_path) and os.path.getsize(prod_path) > 0
-    return prod_ok, prod_path
+        src = os.path.join(config.keys_dir, name)
+        if os.path.exists(src):
+            shutil.copy2(src, os.path.join(config.local_keys_dir, name))
+    prod = os.path.join(config.local_keys_dir, "prod.keys")
+    return os.path.isfile(prod) and os.path.getsize(prod) > 0, prod
 
 
-def _classify_key_result(
-    result: subprocess.CompletedProcess[str],
-) -> Tuple[str, str, bool]:
-    """Classify verification result for key issues."""
-    combined = (result.stderr or "") + "\n" + (result.stdout or "")
-    low = combined.lower()
-    reason = _first_line(result.stderr) or _first_line(result.stdout)
+def _verify_file(path: str) -> Tuple[bool, str]:
+    """Run nsz --quick-verify on a single file.
+
+    Returns:
+        Tuple of (passed, error_message).
+    """
+    result = subprocess.run(
+        ["nsz", "--quick-verify", path], capture_output=True, text=True
+    )
     if result.returncode == 0:
-        return "ok", "Keys check: OK", False
-    key_hint = any(
-        token in low for token in ["prod.keys", "title.keys", "keys.txt", "keys"]
-    )
-    key_bad = key_hint and any(
-        token in low for token in ["missing", "not found", "invalid", "no keys"]
-    )
-    if key_bad:
-        msg = reason or "keys missing or invalid"
-        return "bad", f"Keys check: FAIL - {msg}", True
-    return "unknown", f"Keys check: Unknown (exit {result.returncode})", False
+        return True, ""
+    # Extract error (simplified)
+    err = result.stderr.strip() or result.stdout.strip()
+    if err:
+        err = err.split("\n")[-1]  # Take last line usually containing the error
+    return False, short(err, 100)
 
 
-def run_verification(
-    files: List[str],
-    progress_ui: ProgressUI,
-    keys_check_widget: w.HTML,
-) -> None:
-    """Run verification on a list of files."""
-    pass_count = 0
-    fail_count = 0
+def run_verification(files: List[str], progress: ProgressUI) -> None:
+    """Verify files with progress updates.
 
-    # Pre-check keys with first file
-    prefile = files[0]
-    pre_result = subprocess.run(
-        ["nsz", "--quick-verify", prefile], capture_output=True, text=True
-    )
-    status_tag, check_msg, keys_bad = _classify_key_result(pre_result)
-    keys_check_widget.value = check_msg
+    Args:
+        files: List of file paths to verify.
+        progress: ProgressUI instance for updates.
+    """
+    # Stage keys
+    progress.set_step("[1/2] Staging keys")
+    ok, path = _stage_keys()
+    if not ok:
+        raise RuntimeError(f"prod.keys missing - place in {config.keys_dir}/")
+    progress.log(f"Keys staged: {path}")
 
-    if keys_bad:
-        progress_ui.log(check_msg)
-        return
+    # Verify
+    progress.set_step("[2/2] Verifying")
+    passed = failed = 0
+    total = len(files)
 
-    prefirst = {"path": prefile, "result": pre_result}
-
-    for idx, f in enumerate(files, 1):
-        progress_ui.set_progress(idx, len(files), os.path.basename(f))
-
-        if prefirst and f == prefirst["path"]:
-            result = prefirst["result"]
+    for i, f in enumerate(files, 1):
+        progress.set_progress(i, total, os.path.basename(f))
+        ok, err = _verify_file(f)
+        if ok:
+            passed += 1
+            progress.log(f"OK    {os.path.basename(f)}")
         else:
-            result = subprocess.run(
-                ["nsz", "--quick-verify", f], capture_output=True, text=True
-            )
+            failed += 1
+            progress.log(f"FAIL  {os.path.basename(f)} - {err}")
+        progress.set_extra(passed=passed, failed=failed)
 
-        if result.returncode == 0:
-            pass_count += 1
-            progress_ui.set_extra(passed=pass_count)
-            progress_ui.log(f"OK    {os.path.basename(f)}")
-        else:
-            fail_count += 1
-            progress_ui.set_extra(failed=fail_count)
-            err = _extract_error_message(result)
-            if err:
-                err = _short_msg(err, 140)
-                progress_ui.log(
-                    f"FAIL  {os.path.basename(f)} (exit {result.returncode}) - {err}"
-                )
-            else:
-                progress_ui.log(
-                    f"FAIL  {os.path.basename(f)} (exit {result.returncode})"
-                )
-
-    progress_ui.log(
-        f"Summary: {len(files)} checked | {pass_count} OK | {fail_count} failed"
-    )
-
-
-# --- Plugin ---
+    progress.log(f"Done: {passed} OK | {failed} failed | {total} total")
 
 
 class VerifyTool(BaseTool):
@@ -170,14 +95,14 @@ class VerifyTool(BaseTool):
 
     name = "verify"
     title = "Verify NSZ"
-    description = "Verify Nintendo Switch game files using NSZ quick verify"
+    description = "Verify game files using NSZ quick verify"
     icon = "check-circle"
     button_style = "info"
     order = 2
 
     def ensure_deps(self) -> None:
         """Load NSZ dependency."""
-        _ensure_nsz_deps()
+        ensure_python_modules(["nsz"])
 
     def main(self) -> None:
         """Display verification UI."""
@@ -185,105 +110,42 @@ class VerifyTool(BaseTool):
         files = find_games(config.switch_dir)
 
         if not files:
-            print("No NSP/NSZ/XCI/XCZ files found.")
+            print("No game files found.")
             return
 
-        # Header widgets
-        title = w.HTML("<h3>Verify NSZ</h3>")
-        scan_lbl = w.HTML(f'<span style="color:#666">Scan: {config.switch_dir}</span>')
-
-        key_ok, key_path = _key_status()
-        key_line = w.HTML("")
-        if key_ok:
-            key_line.value = (
-                f'<span style="color:#1a7f37">Keys staged: {key_path}</span>'
-            )
-        else:
-            key_line.value = (
-                f'<span style="color:#b42318">'
-                f"prod.keys missing - place it in {config.keys_dir}/"
-                f"</span>"
-            )
-        keys_check = w.HTML("Keys check: Not run")
-
-        # Range selection
-        range_sel = RangeSelectionUI("From:", "To:", "Verify range")
-        range_sel.set_files(files)
-
-        # Progress UI
+        # UI Components
+        selection = CheckboxListUI(run_label="Verify")
+        selection.set_items(files)
         progress = ProgressUI("Verify NSZ", run_label="Verify", show_bytes=False)
 
-        # Custom stats formatter for verify
-        def format_stats(snap: Dict[str, Any], elapsed: float) -> str:
-            done, total = snap["done"], snap["total"]
-            extra = snap.get("extra", {})
-            rate = done / elapsed if elapsed > 0 else 0
-            parts = [
-                f"Done: {done}/{total}",
-                f"Pass: {extra.get('passed', 0)}",
-                f"Fail: {extra.get('failed', 0)}",
-                f"Rate: {rate:.2f} files/s",
-            ]
-            return " | ".join(parts)
-
-        progress.set_stats_formatter(format_stats)
-
-        def on_run(selected_files: List[str]) -> None:
-            self.ensure_deps()
-
-            # Check keys
-            ok, path = _key_status()
-            if ok:
-                key_line.value = (
-                    f'<span style="color:#1a7f37">Keys staged: {path}</span>'
-                )
-            else:
-                key_line.value = (
-                    f'<span style="color:#b42318">'
-                    f"prod.keys missing - place it in {config.keys_dir}/"
-                    f"</span>"
-                )
-                keys_check.value = "Keys check: Not run (prod.keys missing)"
+        def on_run(selected: List[str]) -> None:
+            if not selected:
                 return
-
-            range_sel.set_running(True)
-            keys_check.value = '<span style="color:#666">Keys check: Running...</span>'
+            self.ensure_deps()
+            selection.set_running(True)
 
             def worker() -> None:
-                run_verification(selected_files, progress, keys_check)
+                run_verification(selected, progress)
 
             def on_complete() -> None:
-                range_sel.set_running(False)
-                if progress.had_error():
-                    progress.finish(success=False)
-                else:
-                    progress.finish(success=True)
-                    # Refresh file list
-                    new_files = find_games(config.switch_dir)
-                    range_sel.set_files(new_files)
+                selection.set_running(False)
+                progress.finish(success=not progress.had_error())
 
             progress.on_complete(on_complete)
-            progress.run_loop(worker, poll_interval=1.0)
+            progress.run_loop(worker)
 
-        range_sel.on_run(on_run)
+        def on_rescan() -> None:
+            new_files = find_games(config.switch_dir)
+            selection.set_items(new_files)
 
-        # Layout
-        selection_box = w.VBox(
-            [
-                title,
-                scan_lbl,
-                key_line,
-                keys_check,
-                range_sel.widget,
-            ]
-        )
+        selection.on_run(on_run)
+        selection.on_rescan(on_rescan)
 
-        ui = w.VBox([selection_box, progress.progress_box])
-
+        ui = w.VBox([progress.title, selection.widget, progress.progress_box])
+        clear_output(wait=True)
         display(ui)
 
 
-# Backwards compatibility - allow `from tools.plugins.verify import main`
+# Backwards compatibility
 def main() -> None:
-    """Entry point for backwards compatibility."""
     VerifyTool().main()

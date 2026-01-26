@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Set
 
 import ipywidgets as w
 from IPython.display import display
@@ -405,8 +406,6 @@ class RangeSelectionUI:
 
     def _build_options(self, files: List[str]) -> List[tuple[str, int]]:
         """Build dropdown options from file list."""
-        import os
-
         options: List[tuple[str, int]] = []
         for i, f in enumerate(files, 1):
             label = f"{i:04d} {short(os.path.basename(f), 70)}"
@@ -426,8 +425,6 @@ class RangeSelectionUI:
 
     def _update_preview(self, _: Any = None) -> None:
         """Update preview output."""
-        import os
-
         subset = self.get_selected_files()
         count = len(subset)
 
@@ -492,5 +489,229 @@ class RangeSelectionUI:
                 self.selection_info,
                 self.preview,
                 self.btn_run,
+            ]
+        )
+
+
+class CheckboxListUI:
+    """Paginated checkbox list for selecting multiple items.
+
+    Attributes:
+        PAGE_SIZE: Number of items per page (default 20).
+    """
+
+    PAGE_SIZE: int = 20
+
+    def __init__(self, run_label: str = "Run") -> None:
+        """Initialize checkbox list UI.
+
+        Args:
+            run_label: Label for run button.
+        """
+        self._items: List[str] = []
+        self._selected: Set[int] = set()
+        self._page: int = 0
+        self._run_label = run_label
+        self._on_run_callback: Optional[Callable[[List[str]], None]] = None
+        self._on_rescan_callback: Optional[Callable[[], None]] = None
+
+        # Header
+        self.header = w.HTML("Files (0)")
+        self.btn_all = w.Button(description="All", layout=w.Layout(width="60px"))
+        self.btn_none = w.Button(description="None", layout=w.Layout(width="60px"))
+        self.btn_invert = w.Button(description="Invert", layout=w.Layout(width="70px"))
+
+        self.btn_all.on_click(self._on_select_all)
+        self.btn_none.on_click(self._on_select_none)
+        self.btn_invert.on_click(self._on_invert)
+
+        # Checkboxes (fixed pool)
+        self._checkboxes = [
+            w.Checkbox(value=False, indent=False, layout=w.Layout(width="95%"))
+            for _ in range(self.PAGE_SIZE)
+        ]
+
+        # Cache handlers to avoid creating new closures constantly
+        self._cb_handlers = [self._make_cb_handler(i) for i in range(self.PAGE_SIZE)]
+
+        # Attach observers
+        for i, cb in enumerate(self._checkboxes):
+            cb.observe(self._cb_handlers[i], names="value")
+
+        self._cb_container = w.VBox(self._checkboxes)
+
+        # Pagination
+        self.btn_prev = w.Button(description="◀", layout=w.Layout(width="40px"))
+        self.btn_next = w.Button(description="▶", layout=w.Layout(width="40px"))
+        self.btn_prev.on_click(self._on_prev)
+        self.btn_next.on_click(self._on_next)
+
+        self._page_btns: List[w.Button] = []
+        self._page_container = w.HBox([])
+
+        # Footer
+        self.selection_info = w.HTML("Selected: 0 / 0")
+        self.btn_run = w.Button(description=run_label, button_style="info")
+        self.btn_rescan = w.Button(description="Rescan")
+
+        self.btn_run.on_click(self._handle_run)
+        self.btn_rescan.on_click(self._handle_rescan)
+
+    def _make_cb_handler(self, index: int) -> Callable[[Any], None]:
+        """Create handler for checkbox at specific index in pool."""
+
+        def handler(change: Any) -> None:
+            if not change["new"] and not change["old"]:
+                return  # Filter out irrelevant changes
+            global_idx = self._page * self.PAGE_SIZE + index
+            if global_idx < len(self._items):
+                if change["new"]:
+                    self._selected.add(global_idx)
+                else:
+                    self._selected.discard(global_idx)
+                self._update_footer()
+
+        return handler
+
+    def set_items(self, items: List[str]) -> None:
+        """Set file list and reset selection."""
+        self._items = items
+        self._selected = set()
+        self._page = 0
+        self._update_display()
+
+    def get_selected(self) -> List[str]:
+        """Return list of selected file paths."""
+        return [self._items[i] for i in sorted(self._selected)]
+
+    def _update_display(self) -> None:
+        """Sync widgets with current state."""
+        total = len(self._items)
+        self.header.value = f"<b>Files ({total})</b>"
+
+        # Update checkboxes
+        start = self._page * self.PAGE_SIZE
+        for i, cb in enumerate(self._checkboxes):
+            idx = start + i
+            if idx < total:
+                cb.layout.display = "flex"
+                cb.description = short(os.path.basename(self._items[idx]), 70)
+                # Unobserve to prevent triggering handler
+                cb.unobserve_all(names="value")
+                cb.value = idx in self._selected
+                # Use cached handler
+                cb.observe(self._cb_handlers[i], names="value")
+            else:
+                cb.layout.display = "none"
+
+        # Update pagination buttons
+        num_pages = (total + self.PAGE_SIZE - 1) // self.PAGE_SIZE
+        self.btn_prev.disabled = self._page <= 0
+        self.btn_next.disabled = self._page >= num_pages - 1
+
+        self._update_page_buttons(num_pages)
+        self._update_footer()
+
+    def _update_page_buttons(self, num_pages: int) -> None:
+        """Update page number buttons."""
+        self._page_container.children = [
+            self.btn_prev,
+            w.HTML(
+                f"&nbsp;&nbsp;Page {self._page + 1} / {max(1, num_pages)}&nbsp;&nbsp;"
+            ),
+            self.btn_next,
+        ]
+
+    def _update_footer(self) -> None:
+        """Update selection count."""
+        count = len(self._selected)
+        total = len(self._items)
+        self.selection_info.value = f"Selected: {count} / {total}"
+        self.btn_run.disabled = count == 0
+
+    def _on_prev(self, _: Any) -> None:
+        if self._page > 0:
+            self._page -= 1
+            self._update_display()
+
+    def _on_next(self, _: Any) -> None:
+        total = len(self._items)
+        num_pages = (total + self.PAGE_SIZE - 1) // self.PAGE_SIZE
+        if self._page < num_pages - 1:
+            self._page += 1
+            self._update_display()
+
+    def _on_select_all(self, _: Any) -> None:
+        self._selected = set(range(len(self._items)))
+        self._update_display()
+
+    def _on_select_none(self, _: Any) -> None:
+        self._selected = set()
+        self._update_display()
+
+    def _on_invert(self, _: Any) -> None:
+        all_idx = set(range(len(self._items)))
+        self._selected = all_idx - self._selected
+        self._update_display()
+
+    def _handle_run(self, _: Any) -> None:
+        if self._on_run_callback:
+            files = self.get_selected()
+            if files:
+                self._on_run_callback(files)
+
+    def _handle_rescan(self, _: Any) -> None:
+        if self._on_rescan_callback:
+            self.btn_rescan.description = "Scanning..."
+            self.btn_rescan.disabled = True
+            self._on_rescan_callback()
+            self.btn_rescan.description = "Rescan"
+            self.btn_rescan.disabled = False
+
+    def on_run(self, callback: Callable[[List[str]], None]) -> None:
+        """Register run callback."""
+        self._on_run_callback = callback
+
+    def on_rescan(self, callback: Callable[[], None]) -> None:
+        """Register rescan callback."""
+        self._on_rescan_callback = callback
+
+    def set_running(self, running: bool) -> None:
+        """Lock/unlock UI during operation."""
+        disabled = running
+        self.btn_all.disabled = disabled
+        self.btn_none.disabled = disabled
+        self.btn_invert.disabled = disabled
+        for cb in self._checkboxes:
+            cb.disabled = disabled
+        self.btn_prev.disabled = disabled or self._page <= 0
+        self.btn_next.disabled = disabled  # Logic in update_display handles bound check
+        self.btn_run.disabled = disabled
+        self.btn_rescan.disabled = disabled
+
+        if running:
+            self.btn_run.description = "Running..."
+            self.btn_run.icon = "spinner"
+        else:
+            self.btn_run.description = self._run_label
+            self.btn_run.icon = ""
+            self._update_display()  # Re-enable correct buttons
+
+    @property
+    def widget(self) -> w.VBox:
+        """Get the main widget container."""
+        return w.VBox(
+            [
+                w.HBox(
+                    [self.header, self.btn_all, self.btn_none, self.btn_invert],
+                    layout=w.Layout(align_items="center", margin="0 0 10px 0"),
+                ),
+                self._cb_container,
+                w.HBox(
+                    [self._page_container],
+                    layout=w.Layout(justify_content="center", margin="10px 0"),
+                ),
+                self.selection_info,
+                w.HBox([self.btn_run, self.btn_rescan]),
             ]
         )

@@ -17,8 +17,12 @@ try:
     HAS_UI_POLL = True
 except ImportError:
     HAS_UI_POLL = False
+    ui_events = None  # type: ignore
 
 from .utils import fmt_bytes, fmt_time, short
+
+# Debug flag - set to True to see polling messages
+_DEBUG_POLL = False
 
 
 def _poll_with_events(interval: float = 0.1) -> None:
@@ -26,11 +30,17 @@ def _poll_with_events(interval: float = 0.1) -> None:
 
     Uses jupyter_ui_poll if available, otherwise falls back to time.sleep.
     """
-    if HAS_UI_POLL:
-        with ui_events() as poll:
-            poll(10)  # Process up to 10 pending UI events
+    if HAS_UI_POLL and ui_events is not None:
+        try:
+            with ui_events() as poll:
+                poll(10)  # Process up to 10 pending UI events
+        except Exception as e:
+            if _DEBUG_POLL:
+                print(f"[poll] Error: {e}")
         time.sleep(interval)
     else:
+        if _DEBUG_POLL:
+            print("[poll] jupyter_ui_poll not available, using time.sleep")
         time.sleep(interval)
 
 

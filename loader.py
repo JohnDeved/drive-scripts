@@ -1,12 +1,17 @@
 """Drive Scripts Loader - Run in Google Colab to access tools."""
 
-import importlib
+from __future__ import annotations
+
 import os
 import shutil
 import subprocess
 import sys
+from typing import TYPE_CHECKING, Callable, List
 
 import ipywidgets as w
+
+if TYPE_CHECKING:
+    from tools.base import BaseTool
 from IPython.display import clear_output, display
 
 REPO_URL = "https://github.com/JohnDeved/drive-scripts.git"
@@ -14,21 +19,21 @@ REPO_DIR = "/content/drive-scripts"
 DRIVE_ROOT = "/content/drive"
 
 
-def ensure_repo():
+def ensure_repo() -> None:
     """Clone or pull the repository with visible output."""
     if os.path.exists(REPO_DIR):
         print("Pulling latest...", flush=True)
-        subprocess.run(["git", "-C", REPO_DIR, "pull"])
+        subprocess.run(["git", "-C", REPO_DIR, "pull"], check=False)
     else:
         print("Cloning repository...", flush=True)
-        subprocess.run(["git", "clone", "--depth=1", REPO_URL, REPO_DIR])
+        subprocess.run(["git", "clone", "--depth=1", REPO_URL, REPO_DIR], check=False)
 
     # Ensure repo is in path
     if REPO_DIR not in sys.path:
         sys.path.insert(0, REPO_DIR)
 
 
-def ensure_drive():
+def ensure_drive() -> bool:
     """Mount Google Drive with status message."""
     print("Mounting Drive...", end=" ", flush=True)
     if os.path.exists(f"{DRIVE_ROOT}/Shareddrives"):
@@ -46,7 +51,7 @@ def ensure_drive():
         return False
 
 
-def ensure_deps():
+def ensure_deps() -> None:
     """Install apt packages and Python modules."""
     print("Installing dependencies...", end=" ", flush=True)
 
@@ -54,27 +59,36 @@ def ensure_deps():
     bins = {"7z": "p7zip-full", "unrar": "unrar", "unzip": "unzip"}
     missing = [pkg for cmd, pkg in bins.items() if shutil.which(cmd) is None]
     if missing:
-        subprocess.run(["apt-get", "install", "-qq"] + missing, capture_output=True)
+        subprocess.run(
+            ["apt-get", "install", "-qq", *missing],
+            capture_output=True,
+            check=False,
+        )
 
     # Python packages from requirements.txt
     req_file = os.path.join(REPO_DIR, "requirements.txt")
     if os.path.exists(req_file):
-        subprocess.run(["pip", "install", "-q", "-r", req_file], capture_output=True)
+        subprocess.run(
+            ["pip", "install", "-q", "-r", req_file],
+            capture_output=True,
+            check=False,
+        )
 
     print("done")
 
 
-def get_version():
+def get_version() -> str:
     """Get current git commit hash."""
     result = subprocess.run(
         ["git", "-C", REPO_DIR, "rev-parse", "--short", "HEAD"],
         capture_output=True,
         text=True,
+        check=False,
     )
     return result.stdout.strip() if result.returncode == 0 else "dev"
 
 
-def main():
+def main() -> None:
     """Bootstrap and display tool selection menu."""
     # Setup with visible logging
     ensure_repo()
@@ -86,6 +100,12 @@ def main():
 
     version = get_version()
 
+    # Import registry after ensuring repo is in path
+    from tools.registry import reload_tools
+
+    # Discover available tools
+    tools = reload_tools()
+
     # UI
     title = w.HTML(
         f'<h2>Drive Scripts</h2><small style="color:#666">v{version}</small>'
@@ -95,54 +115,52 @@ def main():
         f"Drive: {'Mounted' if drive_ok else 'Not mounted'}</span>"
     )
 
-    btn_extract = w.Button(
-        description="Extract Archives",
-        button_style="primary",
-        icon="file-archive-o",
-        layout=w.Layout(width="180px", height="40px"),
-    )
-    btn_verify = w.Button(
-        description="Verify NSZ",
-        button_style="info",
-        icon="check-circle",
-        layout=w.Layout(width="180px", height="40px"),
-    )
-
     output = w.Output()
 
-    def run_tool(module_name, func_name, btn):
-        """Load and run a tool module."""
-        btn.disabled = True
-        btn.icon = "spinner"
-        original_desc = btn.description
-        btn.description = "Loading..."
+    # Create buttons dynamically from discovered tools
+    buttons: List[w.Button] = []
+    for tool in tools:
+        btn = w.Button(
+            description=tool.title,
+            button_style=tool.button_style,
+            icon=tool.icon,
+            layout=w.Layout(width="180px", height="40px"),
+        )
+        buttons.append(btn)
 
-        output.clear_output()
-        with output:
-            try:
-                # Force reload all tools.* modules to pick up any updates
-                for name in list(sys.modules.keys()):
-                    if name.startswith("tools."):
-                        importlib.reload(sys.modules[name])
-                module = importlib.import_module(f"tools.{module_name}")
-                getattr(module, func_name)()
-            except Exception as e:
-                print(f"Error: {e}")
+        def make_handler(t: "BaseTool", b: w.Button) -> "Callable[[w.Button], None]":
+            """Create click handler with proper closure."""
 
-        btn.disabled = False
-        btn.icon = "file-archive-o" if module_name == "extract" else "check-circle"
-        btn.description = original_desc
+            def handler(_: w.Button) -> None:
+                b.disabled = True
+                original_icon = b.icon
+                original_desc = b.description
+                b.icon = "spinner"
+                b.description = "Loading..."
 
-    btn_extract.on_click(lambda _: run_tool("extract", "main", btn_extract))
-    btn_verify.on_click(lambda _: run_tool("verify", "main", btn_verify))
+                output.clear_output()
+                with output:
+                    try:
+                        # Reload tools to pick up any updates
+                        from tools.registry import reload_tools as _reload
+
+                        _reload()
+                        t.main()
+                    except Exception as e:
+                        print(f"Error: {e}")
+
+                b.disabled = False
+                b.icon = original_icon
+                b.description = original_desc
+
+            return handler
+
+        btn.on_click(make_handler(tool, btn))
 
     # Layout
     header = w.VBox([title, status], layout=w.Layout(margin="0 0 10px 0"))
-    buttons = w.HBox(
-        [btn_extract, btn_verify],
-        layout=w.Layout(gap="10px"),
-    )
-    ui = w.VBox([header, buttons, output])
+    button_row = w.HBox(buttons, layout=w.Layout(gap="10px"))
+    ui = w.VBox([header, button_row, output])
 
     display(ui)
 

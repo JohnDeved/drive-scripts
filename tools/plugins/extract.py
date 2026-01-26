@@ -1,18 +1,24 @@
 """Extract Tool: Extract archives from Drive, upload extracted files back."""
 
+from __future__ import annotations
+
 import glob
 import os
 import shutil
 import subprocess
 import time
 import zipfile
+from types import ModuleType
+from typing import Callable, List, Optional, Tuple
 
-from IPython.display import clear_output, display
 import ipywidgets as w
+from IPython.display import clear_output, display
 
-from .shared import (
-    ARCHIVE_EXTS,
-    SWITCH_DIR,
+from config import config
+from tools.base import BaseTool
+from tools.shared import (
+    ProgressUI,
+    SelectionUI,
     copy_with_progress,
     ensure_bins,
     ensure_drive_ready,
@@ -21,16 +27,16 @@ from .shared import (
     fmt_bytes,
     short,
 )
-from .ui import ProgressUI, SelectionUI
 
-LOCAL_DIR = "/content/extract_temp"
-MAX_NESTED = 5
-
-_py7zr = None
-_rarfile = None
+# Lazy-loaded modules
+_py7zr: Optional[ModuleType] = None
+_rarfile: Optional[ModuleType] = None
 
 
-def _ensure_deps():
+ProgressCallback = Callable[[int, int, str], None]
+
+
+def _load_extraction_deps() -> Tuple[ModuleType, ModuleType]:
     """Lazy-load extraction dependencies."""
     global _py7zr, _rarfile
     if _py7zr is None:
@@ -40,12 +46,13 @@ def _ensure_deps():
         import rarfile
 
         _py7zr, _rarfile = py7zr, rarfile
+    return _py7zr, _rarfile  # type: ignore[return-value]
 
 
 # --- Extractors ---
 
 
-def _extract_zip(archive, out_dir, on_prog):
+def _extract_zip(archive: str, out_dir: str, on_prog: ProgressCallback) -> None:
     """Stream-extract zip (works directly on Drive paths)."""
     with zipfile.ZipFile(archive, "r") as zf:
         items = [(i, i.file_size) for i in zf.infolist() if not i.is_dir()]
@@ -60,9 +67,10 @@ def _extract_zip(archive, out_dir, on_prog):
                     on_prog(done, total, info.filename)
 
 
-def _extract_7z(archive, out_dir, on_prog):
+def _extract_7z(archive: str, out_dir: str, on_prog: ProgressCallback) -> None:
     """Extract 7z using CLI with file-size polling for progress."""
-    with _py7zr.SevenZipFile(archive, "r") as zf:
+    py7zr, _ = _load_extraction_deps()
+    with py7zr.SevenZipFile(archive, "r") as zf:
         items = [(i.filename, i.uncompressed) for i in zf.list() if not i.is_directory]
     total = sum(s for _, s in items)
     cmd = ["7z", "x", "-aoa", "-bso0", "-bsp0", f"-o{out_dir}", archive]
@@ -81,9 +89,10 @@ def _extract_7z(archive, out_dir, on_prog):
     on_prog(total, total, "")
 
 
-def _extract_rar(archive, out_dir, on_prog):
+def _extract_rar(archive: str, out_dir: str, on_prog: ProgressCallback) -> None:
     """Stream-extract rar."""
-    with _rarfile.RarFile(archive) as rf:
+    _, rarfile = _load_extraction_deps()
+    with rarfile.RarFile(archive) as rf:
         items = [(i, i.file_size) for i in rf.infolist() if not i.is_dir()]
         total, done = sum(s for _, s in items), 0
         for info, _ in items:
@@ -96,7 +105,7 @@ def _extract_rar(archive, out_dir, on_prog):
                     on_prog(done, total, info.filename)
 
 
-def extract(archive, out_dir, on_prog):
+def extract(archive: str, out_dir: str, on_prog: ProgressCallback) -> None:
     """Extract archive based on extension."""
     ext = os.path.splitext(archive)[1].lower()
     if ext == ".zip":
@@ -112,9 +121,13 @@ def extract(archive, out_dir, on_prog):
 # --- Upload ---
 
 
-def upload_all(src_root, dst_root, on_prog):
+def upload_all(
+    src_root: str,
+    dst_root: str,
+    on_prog: Callable[[int, int, str], None],
+) -> None:
     """Upload all files from src_root to dst_root with progress."""
-    items = []
+    items: List[Tuple[str, str, int]] = []
     for r, _, files in os.walk(src_root):
         rel = os.path.relpath(r, src_root)
         for f in files:
@@ -136,10 +149,15 @@ def upload_all(src_root, dst_root, on_prog):
 # --- Worker ---
 
 
-def run_extraction(archive, out_dir, drive_dest, progress_ui):
+def run_extraction(
+    archive: str,
+    out_dir: str,
+    drive_dest: str,
+    progress_ui: ProgressUI,
+) -> None:
     """Main extraction pipeline."""
     ext = os.path.splitext(archive)[1].lower()
-    local_archive = os.path.join(LOCAL_DIR, os.path.basename(archive))
+    local_archive = os.path.join(config.temp_dir, os.path.basename(archive))
     is_zip = ext == ".zip"
 
     # Step 1: Copy (skip for zip - streams directly from Drive)
@@ -161,7 +179,7 @@ def run_extraction(archive, out_dir, drive_dest, progress_ui):
     )
     progress_ui.log("Main archive extracted.")
 
-    for rnd in range(1, MAX_NESTED + 1):
+    for rnd in range(1, config.max_nested_depth + 1):
         nested = find_archives(out_dir)
         if not nested:
             break
@@ -184,68 +202,89 @@ def run_extraction(archive, out_dir, drive_dest, progress_ui):
 
     # Cleanup
     os.remove(archive)
-    shutil.rmtree(LOCAL_DIR, ignore_errors=True)
+    shutil.rmtree(config.temp_dir, ignore_errors=True)
     progress_ui.log("Cleanup done.")
 
 
-# --- UI ---
+# --- Plugin ---
 
 
-def main():
-    """Main entry point - displays extraction UI."""
-    ensure_drive_ready()
+class ExtractTool(BaseTool):
+    """Extract archives from Drive and upload extracted files back."""
 
-    def load_opts():
-        archives = sorted(
-            f for ext in ARCHIVE_EXTS for f in glob.glob(f"{SWITCH_DIR}/*{ext}")
+    name = "extract"
+    title = "Extract Archives"
+    description = "Extract ZIP, 7z, and RAR archives with nested archive support"
+    icon = "file-archive-o"
+    button_style = "primary"
+    order = 1
+
+    def ensure_deps(self) -> None:
+        """Load extraction dependencies."""
+        _load_extraction_deps()
+
+    def main(self) -> None:
+        """Display extraction UI."""
+        ensure_drive_ready()
+
+        def load_opts() -> dict[str, str]:
+            archives = sorted(
+                f
+                for ext in config.archive_exts
+                for f in glob.glob(f"{config.switch_dir}/*{ext}")
+            )
+            return {
+                f"{short(os.path.basename(z), 45)} ({fmt_bytes(os.path.getsize(z))})": z
+                for z in archives
+            }
+
+        # Create UI components
+        selection = SelectionUI("Archive:", load_opts, "Extract")
+        progress = ProgressUI("Extract Archives", run_label="Extract", show_bytes=True)
+
+        def on_run(archive: str) -> None:
+            self.ensure_deps()
+
+            selection.set_running(True)
+
+            name = os.path.splitext(os.path.basename(archive))[0]
+            out_dir = os.path.join(config.temp_dir, name)
+            drive_dest = os.path.join(config.switch_dir, name)
+            shutil.rmtree(config.temp_dir, ignore_errors=True)
+            os.makedirs(out_dir, exist_ok=True)
+
+            def worker() -> None:
+                run_extraction(archive, out_dir, drive_dest, progress)
+
+            def on_complete() -> None:
+                selection.set_running(False)
+                if progress.had_error():
+                    progress.finish(success=False)
+                else:
+                    progress.finish(success=True)
+                    selection.refresh()
+                    progress.hide()
+
+            progress.on_complete(on_complete)
+            progress.run_loop(worker)
+
+        selection.on_run(on_run)
+
+        # Layout
+        ui = w.VBox(
+            [
+                progress.title,
+                selection.dropdown,
+                selection.widget,
+                progress.progress_box,
+            ]
         )
-        return {
-            f"{short(os.path.basename(z), 45)} ({fmt_bytes(os.path.getsize(z))})": z
-            for z in archives
-        }
 
-    # Create UI components
-    selection = SelectionUI("Archive:", load_opts, "Extract")
-    progress = ProgressUI("Extract Archives", run_label="Extract", show_bytes=True)
+        clear_output(wait=True)
+        display(ui)
 
-    def on_run(archive):
-        _ensure_deps()
 
-        selection.set_running(True)
-
-        name = os.path.splitext(os.path.basename(archive))[0]
-        out_dir = os.path.join(LOCAL_DIR, name)
-        drive_dest = os.path.join(SWITCH_DIR, name)
-        shutil.rmtree(LOCAL_DIR, ignore_errors=True)
-        os.makedirs(out_dir, exist_ok=True)
-
-        def worker():
-            run_extraction(archive, out_dir, drive_dest, progress)
-
-        def on_complete():
-            selection.set_running(False)
-            if progress.had_error():
-                # Don't hide on error - let user see what happened
-                progress.finish(success=False)
-            else:
-                progress.finish(success=True)
-                selection.refresh()
-                progress.hide()
-
-        progress.on_complete(on_complete)
-        progress.run_loop(worker)
-
-    selection.on_run(on_run)
-
-    # Layout
-    ui = w.VBox(
-        [
-            progress.title,
-            selection.dropdown,
-            selection.widget,
-            progress.progress_box,
-        ]
-    )
-
-    clear_output(wait=True)
-    display(ui)
+# Backwards compatibility - allow `from tools.plugins.extract import main`
+def main() -> None:
+    """Entry point for backwards compatibility."""
+    ExtractTool().main()

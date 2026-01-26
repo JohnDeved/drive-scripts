@@ -1,12 +1,15 @@
 """Shared UI components for drive-scripts tools."""
 
+from __future__ import annotations
+
 import threading
 import time
+from typing import Any, Callable, Dict, List, Optional
 
 import ipywidgets as w
-from IPython.display import clear_output, display
+from IPython.display import display
 
-from .shared import fmt_bytes, fmt_time, short
+from .utils import fmt_bytes, fmt_time, short
 
 
 class ProgressUI:
@@ -23,33 +26,42 @@ class ProgressUI:
 
         # In main thread, run update loop:
         ui.run_loop(worker_func)
+
+    Attributes:
+        show_bytes: If True, show bytes in stats; if False, show counts.
+        run_label: Label for the run button.
     """
 
-    def __init__(self, title, run_label="Run", show_bytes=True):
+    def __init__(
+        self,
+        title: str,
+        run_label: str = "Run",
+        show_bytes: bool = True,
+    ) -> None:
         """Initialize progress UI.
 
         Args:
-            title: H3 title text
-            run_label: Label for the run button
-            show_bytes: If True, show bytes in stats; if False, show counts
+            title: H3 title text.
+            run_label: Label for the run button.
+            show_bytes: If True, show bytes in stats; if False, show counts.
         """
         self.show_bytes = show_bytes
         self.run_label = run_label
 
         # State
-        self._state = {
+        self._state: Dict[str, Any] = {
             "step": "",
             "file": "",
             "done": 0,
             "total": 1,
             "logs": [],
             "running": False,
-            "start": 0,
+            "start": 0.0,
             "extra": {},  # For custom stats like passed/failed
         }
         self._lock = threading.Lock()
         self._event = threading.Event()
-        self._error = None  # Track error state
+        self._error: Optional[str] = None  # Track error state
 
         # Widgets
         self.title = w.HTML(f"<h3>{title}</h3>")
@@ -70,41 +82,41 @@ class ProgressUI:
         )
 
         # Callbacks
-        self._on_complete = None
-        self._format_stats = None
+        self._on_complete: Optional[Callable[[], None]] = None
+        self._format_stats: Optional[Callable[[Dict[str, Any], float], str]] = None
 
-    def set_state(self, **kw):
+    def set_state(self, **kw: Any) -> None:
         """Thread-safe state update."""
         with self._lock:
             self._state.update(kw)
         self._event.set()
 
-    def set_step(self, step):
+    def set_step(self, step: str) -> None:
         """Set current step label."""
         self.set_state(step=step)
 
-    def set_progress(self, done, total, file=""):
+    def set_progress(self, done: int, total: int, file: str = "") -> None:
         """Set progress values."""
         self.set_state(done=done, total=max(total, 1), file=file)
 
-    def log(self, msg):
+    def log(self, msg: str) -> None:
         """Append log message."""
         with self._lock:
             self._state["logs"].append(msg)
         self._event.set()
 
-    def set_extra(self, **kw):
+    def set_extra(self, **kw: Any) -> None:
         """Set extra state values (e.g., passed, failed counts)."""
         with self._lock:
             self._state["extra"].update(kw)
         self._event.set()
 
-    def get_extra(self, key, default=None):
+    def get_extra(self, key: str, default: Any = None) -> Any:
         """Get extra state value."""
         with self._lock:
             return self._state["extra"].get(key, default)
 
-    def start(self):
+    def start(self) -> None:
         """Reset and show progress UI."""
         self._error = None  # Reset error state
         self.set_state(
@@ -125,26 +137,29 @@ class ProgressUI:
         self.log_out.clear_output()
         self.progress_box.layout.display = "block"
 
-    def finish(self, success=True):
+    def finish(self, success: bool = True) -> None:
         """Mark as complete."""
         self.set_state(running=False)
         self.progress.bar_style = "success" if success else "danger"
 
-    def had_error(self):
+    def had_error(self) -> bool:
         """Check if an error occurred during run_loop."""
         return self._error is not None
 
-    def hide(self):
+    def hide(self) -> None:
         """Hide progress box."""
         self.progress_box.layout.display = "none"
 
-    def _default_format_stats(self, snap, elapsed):
+    def _default_format_stats(self, snap: Dict[str, Any], elapsed: float) -> str:
         """Default stats formatter."""
         done, total = snap["done"], snap["total"]
         if self.show_bytes:
             rate = done / elapsed if elapsed > 0 else 0
             eta = (total - done) / rate if rate > 0 else 0
-            return f"{fmt_bytes(done)} / {fmt_bytes(total)} | {fmt_bytes(rate)}/s | ETA {fmt_time(eta)}"
+            return (
+                f"{fmt_bytes(done)} / {fmt_bytes(total)} | "
+                f"{fmt_bytes(rate)}/s | ETA {fmt_time(eta)}"
+            )
         else:
             rate = done / elapsed if elapsed > 0 else 0
             extra = snap.get("extra", {})
@@ -156,21 +171,25 @@ class ProgressUI:
             parts.append(f"Rate: {rate:.2f}/s")
             return " | ".join(parts)
 
-    def set_stats_formatter(self, func):
+    def set_stats_formatter(self, func: Callable[[Dict[str, Any], float], str]) -> None:
         """Set custom stats formatter: func(snap, elapsed) -> str."""
         self._format_stats = func
 
-    def run_loop(self, worker_func, poll_interval=0.1):
+    def run_loop(
+        self,
+        worker_func: Callable[[], None],
+        poll_interval: float = 0.1,
+    ) -> None:
         """Run worker in thread and update UI until complete.
 
         Args:
             worker_func: Function to run in worker thread.
                          Should call self.set_step(), self.set_progress(), self.log()
-            poll_interval: How often to update UI (seconds)
+            poll_interval: How often to update UI (seconds).
         """
         self.start()
 
-        def wrapped_worker():
+        def wrapped_worker() -> None:
             try:
                 worker_func()
             except Exception as e:
@@ -190,7 +209,7 @@ class ProgressUI:
 
             with self._lock:
                 snap = dict(self._state)
-                logs = self._state["logs"]
+                logs: List[str] = self._state["logs"]
                 self._state["logs"] = []
 
             self.step_lbl.value = f"<b>{snap['step']}</b>"
@@ -215,7 +234,7 @@ class ProgressUI:
         if self._on_complete:
             self._on_complete()
 
-    def on_complete(self, func):
+    def on_complete(self, func: Callable[[], None]) -> None:
         """Set callback for when run_loop completes."""
         self._on_complete = func
 
@@ -230,19 +249,29 @@ class SelectionUI:
         sel = SelectionUI("Archive:", load_items, "Extract")
         sel.on_run(lambda value: ...)
         sel.display()
+
+    Attributes:
+        dropdown: The dropdown widget.
+        btn_run: The run button widget.
+        btn_scan: The rescan button widget.
     """
 
-    def __init__(self, label, load_func, run_label="Run"):
+    def __init__(
+        self,
+        label: str,
+        load_func: Callable[[], Dict[str, Any]],
+        run_label: str = "Run",
+    ) -> None:
         """Initialize selection UI.
 
         Args:
-            label: Dropdown description label
-            load_func: Function returning {display_label: value} dict
-            run_label: Label for run button
+            label: Dropdown description label.
+            load_func: Function returning {display_label: value} dict.
+            run_label: Label for run button.
         """
         self.load_func = load_func
         self._run_label = run_label
-        self._on_run_callback = None
+        self._on_run_callback: Optional[Callable[[Any], None]] = None
 
         opts = load_func()
 
@@ -258,11 +287,11 @@ class SelectionUI:
         if not opts:
             self.btn_run.disabled = True
 
-    def _handle_run(self, _):
+    def _handle_run(self, _: Any) -> None:
         if self._on_run_callback and self.dropdown.value:
             self._on_run_callback(self.dropdown.value)
 
-    def _handle_rescan(self, _):
+    def _handle_rescan(self, _: Any) -> None:
         self.btn_scan.description = "Scanning..."
         self.btn_scan.icon = "spinner"
         self.btn_scan.disabled = True
@@ -271,17 +300,17 @@ class SelectionUI:
         self.btn_scan.icon = ""
         self.btn_scan.disabled = False
 
-    def on_run(self, callback):
+    def on_run(self, callback: Callable[[Any], None]) -> None:
         """Set run callback: callback(selected_value)."""
         self._on_run_callback = callback
 
-    def refresh(self):
+    def refresh(self) -> None:
         """Reload options from load_func."""
         opts = self.load_func()
         self.dropdown.options = opts
         self.btn_run.disabled = not opts
 
-    def set_running(self, running):
+    def set_running(self, running: bool) -> None:
         """Enable/disable controls during operation."""
         self.btn_run.disabled = running
         self.btn_scan.disabled = running
@@ -294,12 +323,12 @@ class SelectionUI:
             self.btn_run.icon = ""
 
     @property
-    def value(self):
+    def value(self) -> Any:
         """Get currently selected value."""
         return self.dropdown.value
 
     @property
-    def widget(self):
+    def widget(self) -> w.HBox:
         """Get the HBox containing buttons."""
         return w.HBox([self.btn_run, self.btn_scan])
 
@@ -308,15 +337,27 @@ class RangeSelectionUI:
     """Range selection with from/to dropdowns and preview.
 
     Used for selecting a range of files to process.
+
+    Attributes:
+        from_dd: From dropdown widget.
+        to_dd: To dropdown widget.
+        show_all: Show all checkbox widget.
+        preview: Preview output widget.
+        btn_run: Run button widget.
     """
 
-    PREVIEW_LIMIT = 10
+    PREVIEW_LIMIT: int = 10
 
-    def __init__(self, label_from="From:", label_to="To:", run_label="Run"):
+    def __init__(
+        self,
+        label_from: str = "From:",
+        label_to: str = "To:",
+        run_label: str = "Run",
+    ) -> None:
         """Initialize range selection UI."""
         self._run_label = run_label
-        self._on_run_callback = None
-        self._files = []
+        self._on_run_callback: Optional[Callable[[List[str]], None]] = None
+        self._files: List[str] = []
 
         self.from_dd = w.Dropdown(
             options=[], description=label_from, layout=w.Layout(width="100%")
@@ -341,7 +382,7 @@ class RangeSelectionUI:
         self.show_all.observe(self._update_preview, names="value")
         self.btn_run.on_click(self._handle_run)
 
-    def set_files(self, files):
+    def set_files(self, files: List[str]) -> None:
         """Set the list of files and update UI."""
         self._files = files
         if not files:
@@ -362,17 +403,17 @@ class RangeSelectionUI:
         self.btn_run.disabled = False
         self._update_preview()
 
-    def _build_options(self, files):
+    def _build_options(self, files: List[str]) -> List[tuple[str, int]]:
         """Build dropdown options from file list."""
         import os
 
-        options = []
+        options: List[tuple[str, int]] = []
         for i, f in enumerate(files, 1):
             label = f"{i:04d} {short(os.path.basename(f), 70)}"
             options.append((label, i))
         return options
 
-    def get_selected_files(self):
+    def get_selected_files(self) -> List[str]:
         """Get the currently selected range of files."""
         if not self._files:
             return []
@@ -383,7 +424,7 @@ class RangeSelectionUI:
             start_idx, end_idx = end_idx, start_idx
         return self._files[start_idx - 1 : end_idx]
 
-    def _update_preview(self, _=None):
+    def _update_preview(self, _: Any = None) -> None:
         """Update preview output."""
         import os
 
@@ -417,17 +458,17 @@ class RangeSelectionUI:
                 for f in subset[-self.PREVIEW_LIMIT :]:
                     print(os.path.basename(f))
 
-    def _handle_run(self, _):
+    def _handle_run(self, _: Any) -> None:
         if self._on_run_callback:
             files = self.get_selected_files()
             if files:
                 self._on_run_callback(files)
 
-    def on_run(self, callback):
+    def on_run(self, callback: Callable[[List[str]], None]) -> None:
         """Set run callback: callback(selected_files_list)."""
         self._on_run_callback = callback
 
-    def set_running(self, running):
+    def set_running(self, running: bool) -> None:
         """Enable/disable controls during operation."""
         self.from_dd.disabled = running
         self.to_dd.disabled = running
@@ -441,7 +482,7 @@ class RangeSelectionUI:
             self.btn_run.icon = ""
 
     @property
-    def widget(self):
+    def widget(self) -> w.VBox:
         """Get the VBox containing all selection widgets."""
         return w.VBox(
             [

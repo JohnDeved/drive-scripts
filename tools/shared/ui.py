@@ -625,8 +625,14 @@ class CheckboxListUI:
             "<span style='color: #666; font-weight: 500;'>Scanning for files...</span>"
         )
         self.scanning_path_lbl = w.HTML("")
-        self.loading_box = w.HBox(
-            [self.spinner, self.loading_text, self.scanning_path_lbl],
+        self.loading_box = w.VBox(
+            [
+                w.HBox(
+                    [self.spinner, self.loading_text],
+                    layout=w.Layout(justify_content="center", align_items="center"),
+                ),
+                self.scanning_path_lbl,
+            ],
             layout=w.Layout(
                 display="none",
                 width="100%",
@@ -768,10 +774,10 @@ class CheckboxListUI:
         elif path.startswith("/content/drive/MyDrive/"):
             display_path = path.replace("/content/drive/MyDrive/", "")
 
-        # Use a lighter grey and smaller font, fit next to the text
+        # Darker than the loading text (#666), so using #444
         self.scanning_path_lbl.value = (
-            f"<span style='color: #999; font-size: 0.85em; margin-left: 8px;'>"
-            f"({short(display_path, 50)})</span>"
+            f"<div style='color: #444; font-size: 0.85em; margin-top: 4px;'>"
+            f"{short(display_path, 60)}</div>"
         )
 
     def load_items_async(

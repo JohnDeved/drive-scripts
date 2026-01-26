@@ -211,9 +211,12 @@ class ProgressUI:
         threading.Thread(target=wrapped_worker, daemon=True).start()
 
         format_stats = self._format_stats or self._default_format_stats
+        waiting_for_confirm = False
 
         while True:
-            self._event.wait(timeout=poll_interval)
+            # Use shorter timeout when waiting for confirmation to allow widget callbacks
+            timeout = 0.05 if waiting_for_confirm else poll_interval
+            self._event.wait(timeout=timeout)
             self._event.clear()
 
             with self._lock:
@@ -242,6 +245,11 @@ class ProgressUI:
 
             if confirm_req:
                 self._show_confirmation_dialog(confirm_req)
+                waiting_for_confirm = True
+
+            # Check if confirmation was answered
+            if waiting_for_confirm and self._confirm_event.is_set():
+                waiting_for_confirm = False
 
             if not snap["running"]:
                 break

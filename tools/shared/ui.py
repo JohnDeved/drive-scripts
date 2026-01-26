@@ -169,7 +169,7 @@ class ProgressUI:
                 parts.append(f"Pass: {extra['passed']}")
             if "failed" in extra:
                 parts.append(f"Fail: {extra['failed']}")
-            parts.append(f"Rate: {rate:.2f}/s")
+            parts.append(f"Runtime: {fmt_time(elapsed)}")
             return " | ".join(parts)
 
     def set_stats_formatter(self, func: Callable[[Dict[str, Any], float], str]) -> None:

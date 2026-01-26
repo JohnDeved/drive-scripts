@@ -836,26 +836,26 @@ class CheckboxListUI:
                 status = f"{scan_str} {current_dir}"
 
             # Update loading status in header with shiny gradient animation
-            # Use a unique ID for the style to avoid conflicts
             shiny_style = (
                 "<style>"
                 "@keyframes shimmer {"
-                "  0% { background-position: -200% 0; }"
-                "  100% { background-position: 200% 0; }"
+                "  0% { background-position: 100% 0; }"
+                "  100% { background-position: -100% 0; }"
                 "}"
                 ".shiny-text {"
-                "  background: linear-gradient(90deg, #888 0%, #888 35%, #ccc 50%, #888 65%, #888 100%);"
-                "  background-size: 200% 100%;"
+                "  background: linear-gradient(90deg, #888 0%, #888 40%, #ccc 50%, #888 60%, #888 100%);"
+                "  background-size: 300% 100%;"
                 "  -webkit-background-clip: text;"
                 "  background-clip: text;"
                 "  -webkit-text-fill-color: transparent;"
-                "  animation: shimmer 4s infinite linear;"
+                "  animation: shimmer 3s infinite linear;"
+                "  white-space: nowrap;"
                 "}"
                 "</style>"
             )
             self.loading_status.value = (
                 f"{shiny_style}"
-                f"<span style='font-size: 0.85em; margin-left: 10px;'>"
+                f"<span style='font-size: 0.85em; margin-left: 10px; white-space: nowrap;'>"
                 f"<i class='fa fa-spinner fa-spin' style='color: #888; margin-right: 6px;'></i>"
                 f"<span class='shiny-text'>{status}</span></span>"
             )

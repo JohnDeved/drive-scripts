@@ -152,7 +152,10 @@ def find_games_progressive(
     on_scanning: Optional[Callable[[str], None]] = None,
     exts: Optional[Set[str]] = None,
 ) -> List[str]:
-    """Find game files with progress callbacks.
+    """Find game files with progress callbacks using breadth-first search.
+
+    Scans directories level by level (all depth-1 dirs, then depth-2, etc.)
+    to ensure files in shallow directories are found quickly.
 
     Args:
         root: Directory to search.
@@ -168,22 +171,38 @@ def find_games_progressive(
 
     all_found: List[str] = []
 
-    # Use os.walk and report progress on each directory
-    for dirpath, dirnames, filenames in os.walk(root):
-        # Report current directory being scanned
-        if on_scanning:
-            # Show relative path from root
-            rel_path = os.path.relpath(dirpath, root)
-            if rel_path == ".":
-                rel_path = os.path.basename(root)
-            on_scanning(rel_path)
+    # Breadth-first: process directories level by level
+    dirs_to_scan = [root]
 
-        # Check files in current directory
-        for f in filenames:
-            if os.path.splitext(f)[1].lower() in exts:
-                path = os.path.join(dirpath, f)
-                all_found.append(path)
-                on_found(path)
+    while dirs_to_scan:
+        next_level: List[str] = []
+
+        for dirpath in dirs_to_scan:
+            # Report current directory
+            if on_scanning:
+                rel_path = os.path.relpath(dirpath, root)
+                if rel_path == ".":
+                    rel_path = os.path.basename(root)
+                on_scanning(rel_path)
+
+            # Scan this directory (non-recursive)
+            try:
+                entries = os.scandir(dirpath)
+            except OSError:
+                continue
+
+            for entry in entries:
+                try:
+                    if entry.is_file(follow_symlinks=False):
+                        if os.path.splitext(entry.name)[1].lower() in exts:
+                            all_found.append(entry.path)
+                            on_found(entry.path)
+                    elif entry.is_dir(follow_symlinks=False):
+                        next_level.append(entry.path)
+                except OSError:
+                    continue
+
+        dirs_to_scan = next_level
 
     all_found.sort()
     return all_found

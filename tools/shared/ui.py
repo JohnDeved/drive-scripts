@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import ipywidgets as w
 from IPython.display import display
+from IPython import get_ipython
 
 from .utils import fmt_bytes, fmt_time, short
 
@@ -212,12 +213,17 @@ class ProgressUI:
 
         format_stats = self._format_stats or self._default_format_stats
         waiting_for_confirm = False
+        kernel = get_ipython().kernel if get_ipython() else None
 
         while True:
             # Use shorter timeout when waiting for confirmation to allow widget callbacks
             timeout = 0.05 if waiting_for_confirm else poll_interval
             self._event.wait(timeout=timeout)
             self._event.clear()
+
+            # Flush kernel event queue to process widget callbacks
+            if waiting_for_confirm and kernel:
+                kernel.do_one_iteration()
 
             with self._lock:
                 snap = dict(self._state)

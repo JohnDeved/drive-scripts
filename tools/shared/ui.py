@@ -541,7 +541,7 @@ class CheckboxListUI:
         self._checkboxes: List[w.Checkbox] = []  # For observers logic compatibility
 
         for _ in range(self.PAGE_SIZE):
-            # Checkbox (narrow width, no description)
+            # Checkbox
             cb = w.Checkbox(
                 value=False,
                 indent=False,
@@ -551,10 +551,11 @@ class CheckboxListUI:
             info = w.HTML(layout=w.Layout(width="100%"))
 
             # Container: Row with Checkbox + Info
+            # Use rgba for border to work on both light/dark backgrounds
             container = w.HBox(
                 [cb, info],
                 layout=w.Layout(
-                    border="1px solid #e0e0e0",
+                    border="1px solid rgba(128, 128, 128, 0.4)",
                     border_radius="4px",
                     padding="8px 12px",
                     margin="0 0 6px 0",
@@ -680,10 +681,11 @@ class CheckboxListUI:
                 )
 
                 # Set HTML content
+                # Use inherit colors and opacity for dark mode compatibility
                 info.value = (
-                    f"<div style='line-height: 1.4;'>"
-                    f"<div style='font_weight: 500; color: #333;'>{short(filename, 70)}</div>"
-                    f"<div style='font-size: 0.85em; color: #888;'>{size_str} &middot; {date_str}</div>"
+                    f"<div style='line-height: 1.4; color: inherit;'>"
+                    f"<div style='font-weight: 500;'>{short(filename, 95)}</div>"
+                    f"<div style='font-size: 0.85em; opacity: 0.7;'>{size_str} &middot; {date_str}</div>"
                     f"</div>"
                 )
             else:

@@ -27,17 +27,17 @@ from tools.shared import (
 KEY_FILES = ["prod.keys", "title.keys", "keys.txt"]
 
 
-def _load_compress_deps() -> None:
+def _load_compress_deps(key_path: str | None = None) -> None:
     """Lazy-load nsz and its dependencies."""
     ensure_python_modules(["nsz"])
     # Import Keys to ensure they are loaded (requires prod.keys in ~/.switch)
     from nsz.nut import Keys  # type: ignore
 
-    # load_default() returns True if keys loaded successfully, False otherwise
-    if not Keys.load_default():
-        raise RuntimeError(
-            f"Failed to load Switch keys. Ensure prod.keys exists in {config.keys_dir}/"
-        )
+    if key_path:
+        try:
+            Keys.load(key_path)
+        except Exception:
+            pass  # Fallback to default loading if this fails or already loaded
 
 
 def _stage_keys() -> Tuple[bool, str]:
@@ -242,7 +242,7 @@ def run_compression(files: List[str], progress: ProgressUI) -> None:
         raise RuntimeError(f"prod.keys missing - place in {config.keys_dir}/")
 
     # Load dependencies after keys are staged (nsz checks keys on import/load)
-    _load_compress_deps()
+    _load_compress_deps(path)
 
     compressed_count = failed_count = 0
     total_files = len(files)

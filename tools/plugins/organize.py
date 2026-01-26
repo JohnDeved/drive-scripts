@@ -36,7 +36,7 @@ def _sanitize_filename(name: str) -> str:
     return name
 
 
-def _stage_keys() -> bool:
+def _stage_keys() -> Tuple[bool, str]:
     """Stage keys for nsz."""
     os.makedirs(config.local_keys_dir, exist_ok=True)
     for name in KEY_FILES:
@@ -44,16 +44,19 @@ def _stage_keys() -> bool:
         if os.path.exists(src):
             shutil.copy2(src, os.path.join(config.local_keys_dir, name))
     prod = os.path.join(config.local_keys_dir, "prod.keys")
-    return os.path.isfile(prod) and os.path.getsize(prod) > 0
+    return os.path.isfile(prod) and os.path.getsize(prod) > 0, prod
 
 
-def _load_organize_deps() -> None:
+def _load_organize_deps(key_path: str | None = None) -> None:
     """Load dependencies."""
     ensure_python_modules(["nsz", "requests"])
     from nsz.nut import Keys  # type: ignore
 
-    if not Keys.load_default():
-        pass  # We proceed anyway, might fail to parse CNMT but filename parsing might work
+    if key_path:
+        try:
+            Keys.load(key_path)
+        except Exception:
+            pass
 
 
 def _download_titledb(progress: ProgressUI) -> Dict[str, str]:
@@ -276,8 +279,8 @@ class OrganizeTool(BaseTool):
             try:
                 # 1. Setup
                 progress.set_step("Loading dependencies...")
-                _stage_keys()
-                _load_organize_deps()
+                ok, path = _stage_keys()
+                _load_organize_deps(path if ok else None)
 
                 # 2. Download DB
                 progress.set_step("Loading TitleDB...")
@@ -331,7 +334,7 @@ class OrganizeTool(BaseTool):
                             f"Skipping {os.path.basename(path)}: Could not identify"
                         )
 
-                progress.close()
+                output_area.clear_output()
                 show_plan(plan, titledb)
 
             except Exception as e:

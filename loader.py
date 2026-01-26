@@ -103,9 +103,11 @@ def main():
         output.clear_output()
         with output:
             try:
-                # Force reload to pick up any updates
+                # Force reload all tools.* modules to pick up any updates
+                for name in list(sys.modules.keys()):
+                    if name.startswith("tools."):
+                        importlib.reload(sys.modules[name])
                 module = importlib.import_module(f"tools.{module_name}")
-                module = importlib.reload(module)
                 getattr(module, func_name)()
             except Exception as e:
                 print(f"Error: {e}")

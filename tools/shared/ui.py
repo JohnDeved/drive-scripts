@@ -709,7 +709,7 @@ class CheckboxListUI:
 
     def set_items(self, items: List[str]) -> None:
         """Set file list and reset selection."""
-        self._items = items
+        self._items = list(items)
         self._filtered_indices = list(range(len(items)))
         self._selected = set()
         self._page = 0
@@ -719,11 +719,27 @@ class CheckboxListUI:
         self._file_meta = {}
         self._update_display()
 
+    def append_items(self, new_items: List[str]) -> None:
+        """Append items to existing list without resetting selection."""
+        start_idx = len(self._items)
+        self._items.extend(new_items)
+
+        # Update filtered indices if they match current search
+        term = self.search_input.value.lower()
+        for i, item in enumerate(new_items):
+            real_idx = start_idx + i
+            if not term or term in os.path.basename(item).lower():
+                self._filtered_indices.append(real_idx)
+
+        self._update_display()
+
     def set_loading(self, loading: bool) -> None:
         """Show/hide loading spinner."""
         self._is_loading = loading
         self.loading_lbl.layout.display = "block" if loading else "none"
-        self._cb_container.layout.display = "none" if loading else "block"
+        self._cb_container.layout.display = (
+            "none" if loading and not self._items else "block"
+        )
         self.btn_run.disabled = loading or len(self._selected) == 0
         self.btn_rescan.disabled = loading
         self.search_input.disabled = loading
@@ -739,6 +755,9 @@ class CheckboxListUI:
             loader_func: Function returning list of paths.
             on_complete: Optional callback when done.
         """
+        self._items = []
+        self._filtered_indices = []
+        self._selected = set()
         self.set_loading(True)
 
         def worker():
@@ -747,6 +766,35 @@ class CheckboxListUI:
                 # Use a small delay to ensure UI updates don't collide too fast
                 time.sleep(0.1)
                 self.set_items(items)
+            finally:
+                self.set_loading(False)
+                if on_complete:
+                    on_complete()
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def load_items_progressive(
+        self,
+        loader_func: Callable[[Callable[[List[str]], None]], List[str]],
+        on_complete: Optional[Callable] = None,
+    ) -> None:
+        """Load items progressively in background thread.
+
+        Args:
+            loader_func: Function taking a callback and returning full list.
+            on_complete: Optional callback when done.
+        """
+        self._items = []
+        self._filtered_indices = []
+        self._selected = set()
+        self.set_loading(True)
+
+        def on_batch(batch: List[str]):
+            self.append_items(batch)
+
+        def worker():
+            try:
+                loader_func(on_batch)
             finally:
                 self.set_loading(False)
                 if on_complete:

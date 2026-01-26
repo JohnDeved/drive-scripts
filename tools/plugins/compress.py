@@ -21,6 +21,7 @@ from tools.shared import (
     copy_with_progress,
     ensure_drive_ready,
     ensure_python_modules,
+    find_games_progressive,
 )
 from tools.shared.utils import fmt_bytes
 
@@ -55,19 +56,6 @@ def _stage_keys() -> Tuple[bool, str]:
             shutil.copy2(src, os.path.join(config.local_keys_dir, name))
     prod = os.path.join(config.local_keys_dir, "prod.keys")
     return os.path.isfile(prod) and os.path.getsize(prod) > 0, prod
-
-
-def _find_uncompressed_games(root: str) -> List[str]:
-    """Find only .nsp and .xci files (not .nsz/.xcz)."""
-    out: List[str] = []
-    # Filter for uncompressed extensions only
-    targets = {".nsp", ".xci"}
-    for r, _, files in os.walk(root):
-        for f in files:
-            ext = os.path.splitext(f)[1].lower()
-            if ext in targets:
-                out.append(os.path.join(r, f))
-    return sorted(out)
 
 
 def _compress_nsp(
@@ -435,8 +423,15 @@ class CompressTool(BaseTool):
             [verify_chk, confirm_chk], layout=w.Layout(margin="10px 0")
         )
 
-        # Async load files
-        selection.load_items_async(lambda: _find_uncompressed_games(config.switch_dir))
+        # Progressive load files (max 3 levels deep)
+        selection.load_items_progressive(
+            lambda cb: find_games_progressive(
+                config.switch_dir,
+                cb,
+                exts={".nsp", ".xci"},
+                max_depth=3,
+            )
+        )
 
         progress = ProgressUI("Compress NSZ", run_label="Compress", show_bytes=True)
 
@@ -474,16 +469,28 @@ class CompressTool(BaseTool):
                 verify_chk.disabled = False
                 confirm_chk.disabled = False
                 progress.finish(success=not progress.had_error())
-                # Refresh list to remove compressed files
-                new_files = _find_uncompressed_games(config.switch_dir)
-                selection.set_items(new_files)
+                # Refresh list progressively
+                selection.load_items_progressive(
+                    lambda cb: find_games_progressive(
+                        config.switch_dir,
+                        cb,
+                        exts={".nsp", ".xci"},
+                        max_depth=3,
+                    )
+                )
 
             progress.on_complete(on_complete)
             progress.run_loop(worker)
 
         def on_rescan() -> None:
-            new_files = _find_uncompressed_games(config.switch_dir)
-            selection.set_items(new_files)
+            selection.load_items_progressive(
+                lambda cb: find_games_progressive(
+                    config.switch_dir,
+                    cb,
+                    exts={".nsp", ".xci"},
+                    max_depth=3,
+                )
+            )
 
         selection.on_run(on_run)
         selection.on_rescan(on_rescan)

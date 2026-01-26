@@ -146,6 +146,59 @@ def find_games(root: str, exts: Optional[Set[str]] = None) -> List[str]:
     return sorted(out)
 
 
+def find_games_progressive(
+    root: str,
+    on_found: Callable[[List[str]], None],
+    exts: Optional[Set[str]] = None,
+    max_depth: int = 3,
+) -> List[str]:
+    """Find game files up to max_depth, calling on_found as batches are discovered.
+
+    Args:
+        root: Directory to search.
+        on_found: Callback receiving batches of file paths.
+        exts: Set of extensions to match.
+        max_depth: Maximum directory depth to scan.
+
+    Returns:
+        Full list of discovered paths.
+    """
+    if exts is None:
+        exts = config.game_exts
+
+    all_found: List[str] = []
+
+    def _scan(path: str, depth: int) -> None:
+        if depth > max_depth:
+            return
+
+        try:
+            entries = list(os.scandir(path))
+        except (OSError, PermissionError):
+            return
+
+        current_batch: List[str] = []
+        subdirs: List[str] = []
+
+        for entry in entries:
+            if entry.is_file():
+                if os.path.splitext(entry.name)[1].lower() in exts:
+                    current_batch.append(entry.path)
+            elif entry.is_dir():
+                subdirs.append(entry.path)
+
+        if current_batch:
+            current_batch.sort()
+            all_found.extend(current_batch)
+            on_found(current_batch)
+
+        for subdir in subdirs:
+            _scan(subdir, depth + 1)
+
+    _scan(root, 1)
+    return all_found
+
+
 ProgressCallback = Callable[[int, int], None]
 
 

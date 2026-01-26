@@ -18,6 +18,7 @@ from tools.shared import (
     ensure_drive_ready,
     ensure_python_modules,
     find_games,
+    find_games_progressive,
     short,
 )
 
@@ -112,8 +113,10 @@ class VerifyTool(BaseTool):
         selection = CheckboxListUI(run_label="Verify")
         progress = ProgressUI("Verify NSZ", run_label="Verify", show_bytes=False)
 
-        # Async load files
-        selection.load_items_async(lambda: find_games(config.switch_dir))
+        # Progressive load files (max 3 levels deep)
+        selection.load_items_progressive(
+            lambda cb: find_games_progressive(config.switch_dir, cb, max_depth=3)
+        )
 
         def on_run(selected: List[str]) -> None:
             if not selected:
@@ -132,8 +135,9 @@ class VerifyTool(BaseTool):
             progress.run_loop(worker)
 
         def on_rescan() -> None:
-            new_files = find_games(config.switch_dir)
-            selection.set_items(new_files)
+            selection.load_items_progressive(
+                lambda cb: find_games_progressive(config.switch_dir, cb, max_depth=3)
+            )
 
         selection.on_run(on_run)
         selection.on_rescan(on_rescan)

@@ -30,6 +30,12 @@ KEY_FILES = ["prod.keys", "title.keys", "keys.txt"]
 def _load_compress_deps(key_path: str | None = None) -> None:
     """Lazy-load nsz and its dependencies."""
     ensure_python_modules(["nsz"])
+
+    # Configure nsz logging to be silent (prevents stdout spam)
+    from nsz.nut import Print  # type: ignore
+
+    Print.enableInfo = False
+
     # Import Keys to ensure they are loaded (requires prod.keys in ~/.switch)
     from nsz.nut import Keys  # type: ignore
 
@@ -100,7 +106,7 @@ def _compress_nsp(
                     threads=3,  # default for solid
                     statusReport=status_report,
                     id=0,
-                    pleaseNoPrint=True,
+                    pleaseNoPrint=None,
                 )
             except Exception as e:
                 error[0] = e
@@ -154,6 +160,7 @@ def _compress_xci(
                 blockSizeExponent=20,  # 1MB blocks
                 outputDir=out_dir,
                 threads=cpu_count(),
+                pleaseNoPrint=None,
             )
         except Exception as e:
             error[0] = e
@@ -224,7 +231,7 @@ def _verify_file(path: str) -> Tuple[bool, str]:
             raisePfs0Exception=True,
             originalFilePath=None,  # quick verify
             statusReportInfo=[status_report, 0],
-            pleaseNoPrint=True,
+            pleaseNoPrint=None,
         )
         return True, ""
     except VerificationException as e:

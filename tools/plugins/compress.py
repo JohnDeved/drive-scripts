@@ -425,9 +425,10 @@ class CompressTool(BaseTool):
 
         # Progressive load files (max 3 levels deep)
         selection.load_items_progressive(
-            lambda cb: find_games_progressive(
+            lambda batch_cb, scan_cb: find_games_progressive(
                 config.switch_dir,
-                cb,
+                batch_cb,
+                scan_cb,
                 exts={".nsp", ".xci"},
                 max_depth=3,
             )
@@ -471,9 +472,10 @@ class CompressTool(BaseTool):
                 progress.finish(success=not progress.had_error())
                 # Refresh list progressively
                 selection.load_items_progressive(
-                    lambda cb: find_games_progressive(
+                    lambda batch_cb, scan_cb: find_games_progressive(
                         config.switch_dir,
-                        cb,
+                        batch_cb,
+                        scan_cb,
                         exts={".nsp", ".xci"},
                         max_depth=3,
                     )
@@ -484,9 +486,10 @@ class CompressTool(BaseTool):
 
         def on_rescan() -> None:
             selection.load_items_progressive(
-                lambda cb: find_games_progressive(
+                lambda batch_cb, scan_cb: find_games_progressive(
                     config.switch_dir,
-                    cb,
+                    batch_cb,
+                    scan_cb,
                     exts={".nsp", ".xci"},
                     max_depth=3,
                 )

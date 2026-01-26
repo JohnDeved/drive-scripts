@@ -115,7 +115,9 @@ class VerifyTool(BaseTool):
 
         # Progressive load files (max 3 levels deep)
         selection.load_items_progressive(
-            lambda cb: find_games_progressive(config.switch_dir, cb, max_depth=3)
+            lambda batch_cb, scan_cb: find_games_progressive(
+                config.switch_dir, batch_cb, scan_cb, max_depth=3
+            )
         )
 
         def on_run(selected: List[str]) -> None:
@@ -136,7 +138,9 @@ class VerifyTool(BaseTool):
 
         def on_rescan() -> None:
             selection.load_items_progressive(
-                lambda cb: find_games_progressive(config.switch_dir, cb, max_depth=3)
+                lambda batch_cb, scan_cb: find_games_progressive(
+                    config.switch_dir, batch_cb, scan_cb, max_depth=3
+                )
             )
 
         selection.on_run(on_run)

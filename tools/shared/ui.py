@@ -619,10 +619,22 @@ class CheckboxListUI:
 
         # Loading overlay
         self.loading_lbl = w.HTML(
-            "<div style='padding: 20px; text-align: center; color: #666;'>"
+            "<div style='padding: 10px 0 0 0; text-align: center; color: #666;'>"
             "<i class='fa fa-spinner fa-spin fa-2x'></i><br><br>"
-            "Scanning for files...</div>",
-            layout=w.Layout(display="none"),
+            "Scanning for files...</div>"
+        )
+        self.scanning_path_lbl = w.HTML(
+            "",
+            layout=w.Layout(
+                padding="0 10px 10px 10px",
+                text_align="center",
+                opacity="0.6",
+                font_size="0.9em",
+            ),
+        )
+        self.loading_box = w.VBox(
+            [self.loading_lbl, self.scanning_path_lbl],
+            layout=w.Layout(display="none", width="100%"),
         )
 
         # Search
@@ -736,13 +748,30 @@ class CheckboxListUI:
     def set_loading(self, loading: bool) -> None:
         """Show/hide loading spinner."""
         self._is_loading = loading
-        self.loading_lbl.layout.display = "block" if loading else "none"
+        self.loading_box.layout.display = "block" if loading else "none"
         self._cb_container.layout.display = (
             "none" if loading and not self._items else "block"
         )
         self.btn_run.disabled = loading or len(self._selected) == 0
         self.btn_rescan.disabled = loading
         self.search_input.disabled = loading
+        if not loading:
+            self.scanning_path_lbl.value = ""
+
+    def set_scanning_path(self, path: str) -> None:
+        """Update current scanning path label."""
+        # Shorten path for display (remove drive root prefix if possible)
+        from .utils import short
+
+        display_path = path
+        if path.startswith("/content/drive/Shareddrives/"):
+            display_path = path.replace(
+                "/content/drive/Shareddrives/", "Shared Drives/"
+            )
+        elif path.startswith("/content/drive/MyDrive/"):
+            display_path = path.replace("/content/drive/MyDrive/", "My Drive/")
+
+        self.scanning_path_lbl.value = f"<i>Scanning: {short(display_path, 80)}</i>"
 
     def load_items_async(
         self,
@@ -775,13 +804,15 @@ class CheckboxListUI:
 
     def load_items_progressive(
         self,
-        loader_func: Callable[[Callable[[List[str]], None]], List[str]],
+        loader_func: Callable[
+            [Callable[[List[str]], None], Optional[Callable[[str], None]]], List[str]
+        ],
         on_complete: Optional[Callable] = None,
     ) -> None:
         """Load items progressively in background thread.
 
         Args:
-            loader_func: Function taking a callback and returning full list.
+            loader_func: Function taking two callbacks and returning full list.
             on_complete: Optional callback when done.
         """
         self._items = []
@@ -792,9 +823,12 @@ class CheckboxListUI:
         def on_batch(batch: List[str]):
             self.append_items(batch)
 
+        def on_scanning(path: str):
+            self.set_scanning_path(path)
+
         def worker():
             try:
-                loader_func(on_batch)
+                loader_func(on_batch, on_scanning)
             finally:
                 self.set_loading(False)
                 if on_complete:
@@ -989,7 +1023,7 @@ class CheckboxListUI:
                     layout=w.Layout(align_items="center", margin="0 0 10px 0"),
                 ),
                 self.search_input,
-                self.loading_lbl,
+                self.loading_box,
                 self._cb_container,
                 w.HBox(
                     [self._page_container],

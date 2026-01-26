@@ -149,6 +149,7 @@ def find_games(root: str, exts: Optional[Set[str]] = None) -> List[str]:
 def find_games_progressive(
     root: str,
     on_found: Callable[[List[str]], None],
+    on_scanning: Optional[Callable[[str], None]] = None,
     exts: Optional[Set[str]] = None,
     max_depth: int = 3,
 ) -> List[str]:
@@ -157,6 +158,7 @@ def find_games_progressive(
     Args:
         root: Directory to search.
         on_found: Callback receiving batches of file paths.
+        on_scanning: Optional callback receiving current path being scanned.
         exts: Set of extensions to match.
         max_depth: Maximum directory depth to scan.
 
@@ -171,6 +173,9 @@ def find_games_progressive(
     def _scan(path: str, depth: int) -> None:
         if depth > max_depth:
             return
+
+        if on_scanning:
+            on_scanning(path)
 
         try:
             entries = list(os.scandir(path))

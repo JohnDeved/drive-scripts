@@ -597,7 +597,7 @@ class CheckboxListUI:
                 cb.layout.display = "flex"
                 cb.description = short(os.path.basename(self._items[idx]), 70)
                 # Unobserve to prevent triggering handler
-                cb.unobserve_all(names="value")
+                cb.unobserve(self._cb_handlers[i], names="value")
                 cb.value = idx in self._selected
                 # Use cached handler
                 cb.observe(self._cb_handlers[i], names="value")

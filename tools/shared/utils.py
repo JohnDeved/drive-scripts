@@ -151,7 +151,6 @@ def find_games_progressive(
     on_found: Callable[[str], None],
     on_scanning: Optional[Callable[[str], None]] = None,
     exts: Optional[Set[str]] = None,
-    max_depth: int = 3,
 ) -> List[str]:
     """Find game files with progress callbacks.
 
@@ -160,7 +159,6 @@ def find_games_progressive(
         on_found: Callback receiving each file path as it's found.
         on_scanning: Optional callback receiving current directory being scanned.
         exts: Set of extensions to match.
-        max_depth: Maximum directory depth to scan.
 
     Returns:
         Full list of discovered paths.
@@ -170,16 +168,8 @@ def find_games_progressive(
 
     all_found: List[str] = []
 
-    def get_depth(path: str) -> int:
-        rel = os.path.relpath(path, root)
-        if rel == ".":
-            return 0
-        return rel.count(os.sep) + 1
-
-    # Use os.walk but report progress on each directory
+    # Use os.walk and report progress on each directory
     for dirpath, dirnames, filenames in os.walk(root):
-        depth = get_depth(dirpath)
-
         # Report current directory being scanned
         if on_scanning:
             # Show relative path from root
@@ -187,11 +177,6 @@ def find_games_progressive(
             if rel_path == ".":
                 rel_path = os.path.basename(root)
             on_scanning(rel_path)
-
-        # Skip if too deep
-        if depth >= max_depth:
-            dirnames.clear()  # Don't descend further
-            continue
 
         # Check files in current directory
         for f in filenames:

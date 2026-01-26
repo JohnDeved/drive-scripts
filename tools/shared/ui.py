@@ -537,14 +537,32 @@ class CheckboxListUI:
         self.search_input.observe(self._on_search_change, names="value")
 
         # Checkboxes (fixed pool) with metadata labels
-        self._cb_items: List[Tuple[w.Checkbox, w.HTML, w.VBox]] = []
+        self._cb_items: List[Tuple[w.Checkbox, w.HTML, w.HBox]] = []
         self._checkboxes: List[w.Checkbox] = []  # For observers logic compatibility
 
         for _ in range(self.PAGE_SIZE):
-            cb = w.Checkbox(value=False, indent=False, layout=w.Layout(width="95%"))
-            meta = w.HTML("")
-            container = w.VBox([cb, meta], layout=w.Layout(margin="0 0 8px 0"))
-            self._cb_items.append((cb, meta, container))
+            # Checkbox (narrow width, no description)
+            cb = w.Checkbox(
+                value=False,
+                indent=False,
+                layout=w.Layout(width="30px", margin="2px 0 0 0"),
+            )
+            # Info block (HTML)
+            info = w.HTML(layout=w.Layout(width="100%"))
+
+            # Container: Row with Checkbox + Info
+            container = w.HBox(
+                [cb, info],
+                layout=w.Layout(
+                    border="1px solid #e0e0e0",
+                    border_radius="4px",
+                    padding="8px 12px",
+                    margin="0 0 6px 0",
+                    align_items="flex-start",
+                    width="98%",
+                ),
+            )
+            self._cb_items.append((cb, info, container))
             self._checkboxes.append(cb)
 
         # Cache handlers to avoid creating new closures constantly
@@ -640,19 +658,19 @@ class CheckboxListUI:
 
         # Update checkboxes
         start = self._page * self.PAGE_SIZE
-        for i, (cb, meta, container) in enumerate(self._cb_items):
+        for i, (cb, info, container) in enumerate(self._cb_items):
             idx_in_filtered = start + i
             if idx_in_filtered < filtered_count:
                 real_idx = self._filtered_indices[idx_in_filtered]
                 container.layout.display = "flex"
 
-                # Update checkbox
-                cb.description = short(os.path.basename(self._items[real_idx]), 60)
+                # Update checkbox state
                 cb.unobserve(self._cb_handlers[i], names="value")
                 cb.value = real_idx in self._selected
                 cb.observe(self._cb_handlers[i], names="value")
 
-                # Update metadata label
+                # Get data
+                filename = os.path.basename(self._items[real_idx])
                 size, mtime = self._file_meta.get(real_idx, (0, 0.0))
                 size_str = fmt_bytes(size)
                 date_str = (
@@ -660,9 +678,13 @@ class CheckboxListUI:
                     if mtime > 0
                     else "unknown"
                 )
-                meta.value = (
-                    f"<small style='color:#888; margin-left:24px'>"
-                    f"{size_str} &middot; {date_str}</small>"
+
+                # Set HTML content
+                info.value = (
+                    f"<div style='line-height: 1.4;'>"
+                    f"<div style='font_weight: 500; color: #333;'>{short(filename, 70)}</div>"
+                    f"<div style='font-size: 0.85em; color: #888;'>{size_str} &middot; {date_str}</div>"
+                    f"</div>"
                 )
             else:
                 container.layout.display = "none"

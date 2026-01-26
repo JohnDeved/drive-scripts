@@ -153,12 +153,12 @@ def find_games_progressive(
     exts: Optional[Set[str]] = None,
     max_depth: int = 3,
 ) -> List[str]:
-    """Find game files using shell find command for better performance on network mounts.
+    """Find game files with progress callbacks.
 
     Args:
         root: Directory to search.
         on_found: Callback receiving each file path as it's found.
-        on_scanning: Optional callback receiving status updates.
+        on_scanning: Optional callback receiving current directory being scanned.
         exts: Set of extensions to match.
         max_depth: Maximum directory depth to scan.
 
@@ -168,78 +168,37 @@ def find_games_progressive(
     if exts is None:
         exts = config.game_exts
 
-    # Build find command with extension filters
-    # Example: find /path -maxdepth 3 -type f \( -iname "*.nsp" -o -iname "*.nsz" \)
-    name_args: List[str] = []
-    for ext in exts:
-        if name_args:
-            name_args.extend(["-o", "-iname", f"*{ext}"])
-        else:
-            name_args.extend(["-iname", f"*{ext}"])
-
-    # Use stdbuf to force line buffering if available, otherwise just find
-    find_cmd = [
-        "find",
-        root,
-        "-maxdepth",
-        str(max_depth),
-        "-type",
-        "f",
-        "(",
-        *name_args,
-        ")",
-        "-print",
-    ]
-
-    # Try with stdbuf for unbuffered output
-    if shutil.which("stdbuf"):
-        cmd = ["stdbuf", "-oL"] + find_cmd
-    else:
-        cmd = find_cmd
-
     all_found: List[str] = []
 
-    try:
+    def get_depth(path: str) -> int:
+        rel = os.path.relpath(path, root)
+        if rel == ".":
+            return 0
+        return rel.count(os.sep) + 1
+
+    # Use os.walk but report progress on each directory
+    for dirpath, dirnames, filenames in os.walk(root):
+        depth = get_depth(dirpath)
+
+        # Report current directory being scanned
         if on_scanning:
-            on_scanning(root)
+            # Show relative path from root
+            rel_path = os.path.relpath(dirpath, root)
+            if rel_path == ".":
+                rel_path = os.path.basename(root)
+            on_scanning(rel_path)
 
-        # Use Popen with unbuffered reading
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            bufsize=1,  # Line buffered
-        )
+        # Skip if too deep
+        if depth >= max_depth:
+            dirnames.clear()  # Don't descend further
+            continue
 
-        if proc.stdout:
-            while True:
-                line = proc.stdout.readline()
-                if not line:
-                    break
-                path = line.rstrip("\n")
-                if path:
-                    all_found.append(path)
-                    on_found(path)
-
-        proc.wait()
-    except (OSError, subprocess.SubprocessError):
-        # Fallback to Python walker if find command fails
-        if on_scanning:
-            on_scanning(f"{root} (fallback)")
-
-        for r, _, files in os.walk(root):
-            # Check depth
-            rel = os.path.relpath(r, root)
-            depth = 1 if rel == "." else rel.count(os.sep) + 2
-            if depth > max_depth:
-                continue
-
-            for f in files:
-                if os.path.splitext(f)[1].lower() in exts:
-                    path = os.path.join(r, f)
-                    all_found.append(path)
-                    on_found(path)
+        # Check files in current directory
+        for f in filenames:
+            if os.path.splitext(f)[1].lower() in exts:
+                path = os.path.join(dirpath, f)
+                all_found.append(path)
+                on_found(path)
 
     all_found.sort()
     return all_found

@@ -805,14 +805,21 @@ class CheckboxListUI:
             if not term or term in os.path.basename(path).lower():
                 self._filtered_indices.append(real_idx)
 
-            # Update status
+            # Update status with file count
+            count = len(self._items)
+            self.scanning_path_lbl.value = (
+                f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
+                f"Found {count} files</div>"
+            )
+
+        def on_scanning(dir_name: str):
             from .utils import short
 
             count = len(self._items)
-            filename = os.path.basename(path)
+            count_str = f"Found {count} | " if count > 0 else ""
             self.scanning_path_lbl.value = (
                 f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
-                f"Found {count}: {short(filename, 45)}</div>"
+                f"{count_str}Scanning: {short(dir_name, 40)}</div>"
             )
 
         def on_scanning(status: str):

@@ -827,7 +827,7 @@ class CheckboxListUI:
 
             # Build status text with animated scanning
             count_str = f"Found {count}" if count > 0 else ""
-            scan_str = f"{left_dots}Scanning{right_dots}" if current_dir else ""
+            scan_str = f"{left_dots}Scanning{right_dots} |" if current_dir else ""
             if count_str and scan_str:
                 status = f"{count_str} | {scan_str} {current_dir}"
             elif count_str:

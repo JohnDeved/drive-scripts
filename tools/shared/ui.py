@@ -1068,28 +1068,38 @@ class CheckboxListUI:
             self.btn_run.icon = ""
             self._update_display()  # Re-enable correct buttons
 
+    def hide(self) -> None:
+        """Hide the selection widget."""
+        self._container.layout.display = "none"
+
+    def show(self) -> None:
+        """Show the selection widget."""
+        self._container.layout.display = "block"
+
     @property
     def widget(self) -> w.VBox:
         """Get the main widget container."""
-        return w.VBox(
-            [
-                w.HBox(
-                    [
-                        self.btn_all,
-                        self.btn_none,
-                        self.btn_invert,
-                        self.header,
-                        self.loading_status,
-                    ],
-                    layout=w.Layout(align_items="center", margin="0 0 10px 0"),
-                ),
-                self.search_input,
-                self._cb_container,
-                w.HBox(
-                    [self._page_container],
-                    layout=w.Layout(justify_content="center", margin="10px 0"),
-                ),
-                self.selection_info,
-                w.HBox([self.btn_run, self.btn_rescan]),
-            ]
-        )
+        if not hasattr(self, "_container"):
+            self._container = w.VBox(
+                [
+                    w.HBox(
+                        [
+                            self.btn_all,
+                            self.btn_none,
+                            self.btn_invert,
+                            self.header,
+                            self.loading_status,
+                        ],
+                        layout=w.Layout(align_items="center", margin="0 0 10px 0"),
+                    ),
+                    self.search_input,
+                    self._cb_container,
+                    w.HBox(
+                        [self._page_container],
+                        layout=w.Layout(justify_content="center", margin="10px 0"),
+                    ),
+                    self.selection_info,
+                    w.HBox([self.btn_run, self.btn_rescan]),
+                ]
+            )
+        return self._container

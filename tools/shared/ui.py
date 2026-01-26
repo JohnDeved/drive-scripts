@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import threading
 import time
@@ -12,49 +11,26 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 import ipywidgets as w
 from IPython.display import display
 
+try:
+    from jupyter_ui_poll import ui_events
+
+    HAS_UI_POLL = True
+except ImportError:
+    HAS_UI_POLL = False
+
 from .utils import fmt_bytes, fmt_time, short
 
 
-async def _poll_loop_async(
-    poll_func: Callable[[], bool], interval: float, name: str = "poll"
-) -> None:
-    """Async polling loop that runs on the main event loop.
+def _poll_with_events(interval: float = 0.1) -> None:
+    """Sleep while processing UI events.
 
-    Args:
-        poll_func: Function to call each iteration. Returns True to continue, False to stop.
-        interval: Seconds between polls.
-        name: Name for error logging.
+    Uses jupyter_ui_poll if available, otherwise falls back to time.sleep.
     """
-    try:
-        while True:
-            try:
-                should_continue = poll_func()
-                if not should_continue:
-                    break
-            except Exception as e:
-                print(f"[{name}] Error in poll: {e}")
-                break
-            await asyncio.sleep(interval)
-    except asyncio.CancelledError:
-        pass  # Task was cancelled, exit gracefully
-
-
-def _start_polling(
-    poll_func: Callable[[], bool], interval: float, name: str = "poll"
-) -> None:
-    """Start async polling loop on the main event loop.
-
-    Args:
-        poll_func: Function to call each iteration. Returns True to continue, False to stop.
-        interval: Seconds between polls.
-        name: Name for error logging.
-    """
-    try:
-        loop = asyncio.get_event_loop()
-        loop.create_task(_poll_loop_async(poll_func, interval, name))
-    except RuntimeError as e:
-        # No event loop - fall back to blocking (shouldn't happen in Colab)
-        print(f"[{name}] Warning: No event loop available: {e}")
+    if HAS_UI_POLL:
+        with ui_events() as poll:
+            poll(interval)
+    else:
+        time.sleep(interval)
 
 
 class ProgressUI:
@@ -232,7 +208,9 @@ class ProgressUI:
         worker_func: Callable[[], None],
         poll_interval: float = 0.1,
     ) -> None:
-        """Run worker in thread and update UI until complete (non-blocking).
+        """Run worker in thread and update UI until complete.
+
+        Uses jupyter_ui_poll to process widget events while polling.
 
         Args:
             worker_func: Function to run in worker thread.
@@ -254,15 +232,9 @@ class ProgressUI:
         threading.Thread(target=wrapped_worker, daemon=True).start()
 
         format_stats = self._format_stats or self._default_format_stats
-        # Track if we're paused for confirmation dialog
-        paused = [False]
 
-        def poll_update() -> bool:
-            """Poll callback. Returns True to continue, False to stop."""
-            # If paused for confirmation, don't do anything
-            if paused[0]:
-                return True  # Keep polling but skip update
-
+        while True:
+            _poll_with_events(poll_interval)
             self._event.clear()
 
             with self._lock:
@@ -290,14 +262,9 @@ class ProgressUI:
                     self._confirm_request = None
 
             if confirm_req:
-                # Pause polling and show dialog
-                paused[0] = True
-
-                def on_dialog_done():
-                    paused[0] = False
-
-                self._show_confirmation_dialog_async(confirm_req, on_dialog_done)
-                return True  # Keep polling (will skip updates while paused)
+                # Show dialog and wait for response
+                self._show_confirmation_dialog_blocking(confirm_req)
+                continue
 
             if not snap["running"]:
                 # Done - call completion
@@ -305,17 +272,10 @@ class ProgressUI:
                     self.progress.bar_style = "danger"
                 if self._on_complete:
                     self._on_complete()
-                return False  # Stop polling
+                return
 
-            return True  # Continue polling
-
-        # Start async polling loop
-        _start_polling(poll_update, poll_interval, "ProgressUI")
-
-    def _show_confirmation_dialog_async(
-        self, data: Dict[str, Any], on_done: Callable[[], None]
-    ) -> None:
-        """Show confirmation dialog with async button handling."""
+    def _show_confirmation_dialog_blocking(self, data: Dict[str, Any]) -> None:
+        """Show confirmation dialog and wait for response using ui_poll."""
         orig_size = data["orig_size"]
         new_size = data["new_size"]
         filename = data["filename"]
@@ -337,23 +297,17 @@ class ProgressUI:
             description="Discard", button_style="danger", icon="times"
         )
 
+        responded = [False]
+
         def on_keep(_):
             with self._lock:
                 self._confirm_response = True
-            if self._confirm_ui:
-                self._confirm_ui.layout.display = "none"
-                self._confirm_ui.children = []
-            self._confirm_event.set()
-            on_done()  # Resume the loop
+            responded[0] = True
 
         def on_discard(_):
             with self._lock:
                 self._confirm_response = False
-            if self._confirm_ui:
-                self._confirm_ui.layout.display = "none"
-                self._confirm_ui.children = []
-            self._confirm_event.set()
-            on_done()  # Resume the loop
+            responded[0] = True
 
         btn_keep.on_click(on_keep)
         btn_discard.on_click(on_discard)
@@ -361,6 +315,17 @@ class ProgressUI:
         if self._confirm_ui:
             self._confirm_ui.children = [html, w.HBox([btn_keep, btn_discard])]
             self._confirm_ui.layout.display = "block"
+
+        # Poll until user responds
+        while not responded[0]:
+            _poll_with_events(0.1)
+
+        # Hide dialog
+        if self._confirm_ui:
+            self._confirm_ui.layout.display = "none"
+            self._confirm_ui.children = []
+
+        self._confirm_event.set()
 
     def on_complete(self, func: Callable[[], None]) -> None:
         """Set callback for when run_loop completes."""
@@ -914,8 +879,8 @@ class CheckboxListUI:
                     state["running"] = False
                     state["current_dir"] = ""
 
-        def poll_update() -> bool:
-            """Poll callback. Returns True to continue, False to stop."""
+        def do_poll_update():
+            """Single poll iteration. Returns True to continue, False to stop."""
             # Check for cancellation
             if self._cancel_requested:
                 with state_lock:
@@ -974,8 +939,9 @@ class CheckboxListUI:
         # Start worker thread
         threading.Thread(target=worker, daemon=True).start()
 
-        # Start async polling loop
-        _start_polling(poll_update, 0.2, "CheckboxListUI")
+        # Poll loop with UI events processing
+        while do_poll_update():
+            _poll_with_events(0.2)
 
     def _ensure_metadata(self, indices: List[int]) -> None:
         """Fetch metadata for specific indices if missing."""

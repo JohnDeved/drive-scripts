@@ -222,8 +222,11 @@ class ProgressUI:
             self._event.clear()
 
             # Flush kernel event queue to process widget callbacks
-            if waiting_for_confirm and kernel:
-                kernel.do_one_iteration()
+            if kernel:
+                try:
+                    kernel.do_one_iteration()
+                except Exception:
+                    pass  # Ignore errors if kernel is busy
 
             with self._lock:
                 snap = dict(self._state)
@@ -868,10 +871,20 @@ class CheckboxListUI:
         # Start worker thread
         threading.Thread(target=worker, daemon=True).start()
 
+        # Get kernel for flushing widget events
+        kernel = get_ipython().kernel if get_ipython() else None
+
         # Main thread polling loop - updates widgets properly
         dots = 0
         while True:
-            time.sleep(0.3)
+            time.sleep(0.1)
+
+            # Flush kernel event queue to process widget callbacks (search, pagination, etc.)
+            if kernel:
+                try:
+                    kernel.do_one_iteration()
+                except Exception:
+                    pass  # Ignore errors if kernel is busy
 
             # Check for cancellation
             if self._cancel_requested:

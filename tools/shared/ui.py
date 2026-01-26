@@ -189,7 +189,7 @@ class ProgressUI:
         worker_func: Callable[[], None],
         poll_interval: float = 0.1,
     ) -> None:
-        """Run worker in thread and update UI until complete.
+        """Run worker in thread and update UI until complete (non-blocking).
 
         Args:
             worker_func: Function to run in worker thread.
@@ -211,55 +211,60 @@ class ProgressUI:
         threading.Thread(target=wrapped_worker, daemon=True).start()
 
         format_stats = self._format_stats or self._default_format_stats
+        timer_ref: List[Optional[threading.Timer]] = [None]
 
-        def poll_loop():
-            """Poll for updates. Returns True if should continue, False if waiting for confirm."""
-            while True:
-                self._event.wait(timeout=poll_interval)
-                self._event.clear()
+        def poll_update():
+            """Timer callback to update UI."""
+            self._event.clear()
 
-                with self._lock:
-                    snap = dict(self._state)
-                    logs: List[str] = self._state["logs"]
-                    self._state["logs"] = []
+            with self._lock:
+                snap = dict(self._state)
+                logs: List[str] = self._state["logs"]
+                self._state["logs"] = []
 
-                self.step_lbl.value = f"<b>{snap['step']}</b>"
-                self.file_lbl.value = short(snap["file"], 70)
-                self.progress.max = max(snap["total"], 1)
-                self.progress.value = snap["done"]
+            self.step_lbl.value = f"<b>{snap['step']}</b>"
+            self.file_lbl.value = short(snap["file"], 70)
+            self.progress.max = max(snap["total"], 1)
+            self.progress.value = snap["done"]
 
-                elapsed = time.monotonic() - snap["start"]
-                self.stats_lbl.value = format_stats(snap, elapsed)
+            elapsed = time.monotonic() - snap["start"]
+            self.stats_lbl.value = format_stats(snap, elapsed)
 
-                for msg in logs:
-                    with self.log_out:
-                        print(msg)
+            for msg in logs:
+                with self.log_out:
+                    print(msg)
 
-                # Check for confirmation request
-                confirm_req = None
-                with self._lock:
-                    if self._confirm_request:
-                        confirm_req = self._confirm_request
-                        self._confirm_request = None
+            # Check for confirmation request
+            confirm_req = None
+            with self._lock:
+                if self._confirm_request:
+                    confirm_req = self._confirm_request
+                    self._confirm_request = None
 
-                if confirm_req:
-                    # Show dialog and EXIT the loop to allow widget events
-                    self._show_confirmation_dialog_async(confirm_req, resume_loop)
-                    return  # Exit loop - button callback will resume
+            if confirm_req:
+                # Show dialog and EXIT - button callback will resume
+                self._show_confirmation_dialog_async(confirm_req, schedule_next)
+                return
 
-                if not snap["running"]:
-                    # Done - call completion
-                    if self._error:
-                        self.progress.bar_style = "danger"
-                    if self._on_complete:
-                        self._on_complete()
-                    return
+            if not snap["running"]:
+                # Done - call completion
+                if self._error:
+                    self.progress.bar_style = "danger"
+                if self._on_complete:
+                    self._on_complete()
+                return
 
-        def resume_loop():
-            """Resume polling after confirmation."""
-            poll_loop()
+            # Schedule next update
+            schedule_next()
 
-        poll_loop()
+        def schedule_next():
+            """Schedule next poll update."""
+            timer_ref[0] = threading.Timer(poll_interval, poll_update)
+            timer_ref[0].daemon = True
+            timer_ref[0].start()
+
+        # Start polling timer
+        schedule_next()
 
     def _show_confirmation_dialog_async(
         self, data: Dict[str, Any], on_done: Callable[[], None]

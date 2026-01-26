@@ -122,8 +122,13 @@ def upload_all(src_root, dst_root, on_prog):
             items.append((src, os.path.join(dst_root, rel, f), os.path.getsize(src)))
     total, done = sum(s for *_, s in items), 0
     for src, dst, sz in items:
-        on_prog(done, total, os.path.basename(src))
-        copy_with_progress(src, dst, lambda d, t: on_prog(done + d, total))
+        fname = os.path.basename(src)
+        on_prog(done, total, fname)
+        # Capture done and fname in closure defaults to avoid reference bugs
+        done_start = done
+        copy_with_progress(
+            src, dst, lambda d, t, _d=done_start, _f=fname: on_prog(_d + d, total, _f)
+        )
         done += sz
     on_prog(total, total, "")
 
@@ -218,10 +223,14 @@ def main():
             run_extraction(archive, out_dir, drive_dest, progress)
 
         def on_complete():
-            progress.finish()
             selection.set_running(False)
-            selection.refresh()
-            progress.hide()
+            if progress.had_error():
+                # Don't hide on error - let user see what happened
+                progress.finish(success=False)
+            else:
+                progress.finish(success=True)
+                selection.refresh()
+                progress.hide()
 
         progress.on_complete(on_complete)
         progress.run_loop(worker)

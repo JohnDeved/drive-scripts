@@ -219,11 +219,15 @@ def main():
             run_verification(selected_files, progress, keys_check)
 
         def on_complete():
-            progress.finish()
             range_sel.set_running(False)
-            # Refresh file list
-            new_files = find_games(SWITCH_DIR)
-            range_sel.set_files(new_files)
+            if progress.had_error():
+                # Don't hide on error - let user see what happened
+                progress.finish(success=False)
+            else:
+                progress.finish(success=True)
+                # Refresh file list
+                new_files = find_games(SWITCH_DIR)
+                range_sel.set_files(new_files)
 
         progress.on_complete(on_complete)
         progress.run_loop(worker, poll_interval=1.0)

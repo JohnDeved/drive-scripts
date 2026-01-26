@@ -49,6 +49,7 @@ class ProgressUI:
         }
         self._lock = threading.Lock()
         self._event = threading.Event()
+        self._error = None  # Track error state
 
         # Widgets
         self.title = w.HTML(f"<h3>{title}</h3>")
@@ -105,6 +106,7 @@ class ProgressUI:
 
     def start(self):
         """Reset and show progress UI."""
+        self._error = None  # Reset error state
         self.set_state(
             step="",
             file="",
@@ -127,6 +129,10 @@ class ProgressUI:
         """Mark as complete."""
         self.set_state(running=False)
         self.progress.bar_style = "success" if success else "danger"
+
+    def had_error(self):
+        """Check if an error occurred during run_loop."""
+        return self._error is not None
 
     def hide(self):
         """Hide progress box."""
@@ -168,6 +174,7 @@ class ProgressUI:
             try:
                 worker_func()
             except Exception as e:
+                self._error = str(e)
                 self.set_step(f"Error: {e}")
                 self.log(f"Error: {e}")
             finally:
@@ -200,6 +207,10 @@ class ProgressUI:
 
             if not snap["running"]:
                 break
+
+        # Show error state visually before calling on_complete
+        if self._error:
+            self.progress.bar_style = "danger"
 
         if self._on_complete:
             self._on_complete()

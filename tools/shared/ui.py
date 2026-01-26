@@ -785,7 +785,7 @@ class CheckboxListUI:
         ],
         on_complete: Optional[Callable] = None,
     ) -> None:
-        """Load items progressively in background thread.
+        """Load items progressively with a blocking polling loop.
 
         Args:
             loader_func: Function taking on_found(path) and on_scanning(path) callbacks.
@@ -797,10 +797,9 @@ class CheckboxListUI:
         self._file_meta = {}
         self.set_loading(True)
 
-        # Shared state for animation
-        scan_complete = threading.Event()
-        current_status = ["Starting..."]
-        status_lock = threading.Lock()
+        # Shared state between worker and main thread
+        state = {"status": "Starting", "running": True}
+        state_lock = threading.Lock()
 
         def on_found(path: str):
             self._items.append(path)
@@ -809,46 +808,52 @@ class CheckboxListUI:
             if not term or term in os.path.basename(path).lower():
                 self._filtered_indices.append(real_idx)
 
-            # Update shared status
-            with status_lock:
-                current_status[0] = f"Found {len(self._items)} files"
+            with state_lock:
+                state["status"] = f"Found {len(self._items)} files"
 
         def on_scanning(dir_name: str):
             from .utils import short
 
-            with status_lock:
+            with state_lock:
                 count = len(self._items)
                 count_str = f"Found {count} | " if count > 0 else ""
-                current_status[0] = f"{count_str}Scanning: {short(dir_name, 35)}"
-
-        def animator():
-            """Animate the status text to show activity."""
-            dots = 0
-            while not scan_complete.is_set():
-                dots = (dots % 3) + 1
-                dot_str = "." * dots + " " * (3 - dots)
-
-                with status_lock:
-                    status = current_status[0]
-
-                self.scanning_path_lbl.value = (
-                    f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
-                    f"{status}{dot_str}</div>"
-                )
-                time.sleep(0.3)
+                state["status"] = f"{count_str}Scanning: {short(dir_name, 35)}"
 
         def worker():
             try:
                 loader_func(on_found, on_scanning)
             finally:
-                scan_complete.set()
-                self._update_display()
-                self.set_loading(False)
-                if on_complete:
-                    on_complete()
+                with state_lock:
+                    state["running"] = False
 
+        # Start worker thread
         threading.Thread(target=worker, daemon=True).start()
-        threading.Thread(target=animator, daemon=True).start()
+
+        # Main thread polling loop - updates widgets properly
+        dots = 0
+        while True:
+            time.sleep(0.3)
+            dots = (dots % 3) + 1
+            dot_str = "." * dots
+
+            with state_lock:
+                status = state["status"]
+                running = state["running"]
+
+            # Update widget from main thread
+            self.scanning_path_lbl.value = (
+                f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
+                f"{status}{dot_str}</div>"
+            )
+
+            if not running:
+                break
+
+        # Done - update display and hide loading
+        self._update_display()
+        self.set_loading(False)
+        if on_complete:
+            on_complete()
 
     def _ensure_metadata(self, indices: List[int]) -> None:
         """Fetch metadata for specific indices if missing."""

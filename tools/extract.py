@@ -4,12 +4,11 @@ import glob
 import os
 import shutil
 import subprocess
-import threading
 import time
 import zipfile
 
-import ipywidgets as w
 from IPython.display import clear_output, display
+import ipywidgets as w
 
 from .shared import (
     ARCHIVE_EXTS,
@@ -20,9 +19,9 @@ from .shared import (
     ensure_python_modules,
     find_archives,
     fmt_bytes,
-    fmt_time,
     short,
 )
+from .ui import ProgressUI, SelectionUI
 
 LOCAL_DIR = "/content/extract_temp"
 MAX_NESTED = 5
@@ -132,7 +131,7 @@ def upload_all(src_root, dst_root, on_prog):
 # --- Worker ---
 
 
-def run_extraction(archive, out_dir, drive_dest, on_step, on_prog, on_log):
+def run_extraction(archive, out_dir, drive_dest, progress_ui):
     """Main extraction pipeline."""
     ext = os.path.splitext(archive)[1].lower()
     local_archive = os.path.join(LOCAL_DIR, os.path.basename(archive))
@@ -140,40 +139,48 @@ def run_extraction(archive, out_dir, drive_dest, on_step, on_prog, on_log):
 
     # Step 1: Copy (skip for zip - streams directly from Drive)
     if not is_zip:
-        on_step("[1/3] Copying to local")
+        progress_ui.set_step("[1/3] Copying to local")
         copy_with_progress(
             archive,
             local_archive,
-            lambda d, t: on_prog(d, t, os.path.basename(archive)),
+            lambda d, t: progress_ui.set_progress(d, t, os.path.basename(archive)),
         )
-        on_log("Copied to local.")
+        progress_ui.log("Copied to local.")
 
     # Step 2: Extract main + nested
-    on_step("[1/2] Extracting" if is_zip else "[2/3] Extracting")
-    extract(archive if is_zip else local_archive, out_dir, on_prog)
-    on_log("Main archive extracted.")
+    progress_ui.set_step("[1/2] Extracting" if is_zip else "[2/3] Extracting")
+    extract(
+        archive if is_zip else local_archive,
+        out_dir,
+        lambda d, t, f: progress_ui.set_progress(d, t, f),
+    )
+    progress_ui.log("Main archive extracted.")
 
     for rnd in range(1, MAX_NESTED + 1):
         nested = find_archives(out_dir)
         if not nested:
             break
         for i, f in enumerate(nested, 1):
-            on_prog(i - 1, len(nested), f"Nested: {os.path.basename(f)}")
+            progress_ui.set_progress(
+                i - 1, len(nested), f"Nested: {os.path.basename(f)}"
+            )
             extract(
-                f, os.path.dirname(f), lambda d, t, n: on_prog(i - 1, len(nested), n)
+                f,
+                os.path.dirname(f),
+                lambda d, t, n: progress_ui.set_progress(i - 1, len(nested), n),
             )
             os.remove(f)
-        on_log(f"Nested round {rnd}: {len(nested)} archives.")
+        progress_ui.log(f"Nested round {rnd}: {len(nested)} archives.")
 
     # Step 3: Upload
-    on_step("[2/2] Uploading" if is_zip else "[3/3] Uploading")
-    upload_all(out_dir, drive_dest, on_prog)
-    on_log("Upload complete.")
+    progress_ui.set_step("[2/2] Uploading" if is_zip else "[3/3] Uploading")
+    upload_all(out_dir, drive_dest, lambda d, t, f: progress_ui.set_progress(d, t, f))
+    progress_ui.log("Upload complete.")
 
     # Cleanup
     os.remove(archive)
     shutil.rmtree(LOCAL_DIR, ignore_errors=True)
-    on_log("Cleanup done.")
+    progress_ui.log("Cleanup done.")
 
 
 # --- UI ---
@@ -192,70 +199,14 @@ def main():
             for z in archives
         }
 
-    opts = load_opts()
+    # Create UI components
+    selection = SelectionUI("Archive:", load_opts, "Extract")
+    progress = ProgressUI("Extract Archives", run_label="Extract", show_bytes=True)
 
-    # Widgets
-    title = w.HTML("<h3>Extract Archives</h3>")
-    dropdown = w.Dropdown(
-        options=opts, description="Archive:", layout=w.Layout(width="100%")
-    )
-    btn_run = w.Button(description="Extract", button_style="primary")
-    btn_scan = w.Button(description="Rescan")
-    step_lbl = w.HTML("")
-    file_lbl = w.HTML("")
-    prog = w.FloatProgress(
-        value=0, min=0, max=1, bar_style="info", layout=w.Layout(width="100%")
-    )
-    stats_lbl = w.HTML("")
-    log_out = w.Output(
-        layout=w.Layout(max_height="150px", overflow="auto", border="1px solid #ccc")
-    )
-    prog_box = w.VBox(
-        [step_lbl, file_lbl, prog, stats_lbl, log_out],
-        layout=w.Layout(display="none", padding="10px"),
-    )
-    ui = w.VBox([title, dropdown, w.HBox([btn_run, btn_scan]), prog_box])
-
-    state = {
-        "step": "",
-        "file": "",
-        "done": 0,
-        "total": 1,
-        "logs": [],
-        "running": False,
-        "start": 0,
-    }
-    lock = threading.Lock()
-    event = threading.Event()
-
-    def set_state(**kw):
-        with lock:
-            state.update(kw)
-        event.set()
-
-    def push_log(msg):
-        with lock:
-            state["logs"].append(msg)
-        event.set()
-
-    def refresh():
-        o = load_opts()
-        dropdown.options = o
-        btn_run.disabled = not o
-
-    def on_run(_):
-        archive = dropdown.value
-        if not archive:
-            return
-
-        # Instant feedback
-        btn_run.disabled = btn_scan.disabled = dropdown.disabled = True
-        btn_run.description = "Extracting..."
-        btn_run.icon = "spinner"
-        prog_box.layout.display = "block"
-        log_out.clear_output()
-
+    def on_run(archive):
         _ensure_deps()
+
+        selection.set_running(True)
 
         name = os.path.splitext(os.path.basename(archive))[0]
         out_dir = os.path.join(LOCAL_DIR, name)
@@ -263,80 +214,29 @@ def main():
         shutil.rmtree(LOCAL_DIR, ignore_errors=True)
         os.makedirs(out_dir, exist_ok=True)
 
-        set_state(
-            step="",
-            file="",
-            done=0,
-            total=1,
-            logs=[],
-            running=True,
-            start=time.monotonic(),
-        )
-
         def worker():
-            try:
-                run_extraction(
-                    archive,
-                    out_dir,
-                    drive_dest,
-                    on_step=lambda s: set_state(step=s),
-                    on_prog=lambda d, t, f="": set_state(
-                        done=d, total=max(t, 1), file=f
-                    ),
-                    on_log=push_log,
-                )
-            except Exception as e:
-                set_state(step=f"Error: {e}")
-                push_log(f"Error: {e}")
-            finally:
-                set_state(running=False)
+            run_extraction(archive, out_dir, drive_dest, progress)
 
-        threading.Thread(target=worker, daemon=True).start()
+        def on_complete():
+            progress.finish()
+            selection.set_running(False)
+            selection.refresh()
+            progress.hide()
 
-        # UI update loop
-        while True:
-            event.wait(timeout=0.1)
-            event.clear()
-            with lock:
-                snap = dict(state)
-                logs, state["logs"] = state["logs"], []
+        progress.on_complete(on_complete)
+        progress.run_loop(worker)
 
-            step_lbl.value = f"<b>{snap['step']}</b>"
-            file_lbl.value = short(snap["file"], 70)
-            prog.max, prog.value = max(snap["total"], 1), snap["done"]
+    selection.on_run(on_run)
 
-            elapsed = time.monotonic() - snap["start"]
-            rate = snap["done"] / elapsed if elapsed > 0 else 0
-            eta = (snap["total"] - snap["done"]) / rate if rate > 0 else 0
-            stats_lbl.value = f"{fmt_bytes(snap['done'])} / {fmt_bytes(snap['total'])} | {fmt_bytes(rate)}/s | ETA {fmt_time(eta)}"
-
-            for msg in logs:
-                with log_out:
-                    print(msg)
-
-            if not snap["running"]:
-                break
-
-        prog.bar_style = "success"
-        btn_run.description = "Extract"
-        btn_run.icon = ""
-        btn_run.disabled = btn_scan.disabled = dropdown.disabled = False
-        refresh()
-        prog_box.layout.display = "none"
-
-    def on_rescan(_):
-        btn_scan.description = "Scanning..."
-        btn_scan.icon = "spinner"
-        btn_scan.disabled = True
-        refresh()
-        btn_scan.description = "Rescan"
-        btn_scan.icon = ""
-        btn_scan.disabled = False
-
-    btn_run.on_click(on_run)
-    btn_scan.on_click(on_rescan)
-    if not opts:
-        btn_run.disabled = True
+    # Layout
+    ui = w.VBox(
+        [
+            progress.title,
+            selection.dropdown,
+            selection.widget,
+            progress.progress_box,
+        ]
+    )
 
     clear_output(wait=True)
     display(ui)

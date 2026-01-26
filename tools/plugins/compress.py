@@ -22,6 +22,7 @@ from tools.shared import (
     ensure_drive_ready,
     ensure_python_modules,
 )
+from tools.shared.utils import fmt_bytes
 
 
 KEY_FILES = ["prod.keys", "title.keys", "keys.txt"]
@@ -265,7 +266,13 @@ def _verify_file(
     return True, ""
 
 
-def run_compression(files: List[str], progress: ProgressUI) -> None:
+def run_compression(
+    files: List[str],
+    progress: ProgressUI,
+    verify_after: bool,
+    ask_confirm: bool,
+    confirm_callback: Callable[[int, int, str], bool],
+) -> None:
     """Main compression pipeline."""
     # Stage keys first
     progress.set_step("[0/4] Staging keys")
@@ -297,14 +304,14 @@ def run_compression(files: List[str], progress: ProgressUI) -> None:
         os.makedirs(config.temp_dir, exist_ok=True)
 
         try:
-            # [1/4] Copy to local
-            progress.set_step(f"[1/4] Copying ({i}/{total_files})")
+            # [1/5] Copy to local
+            progress.set_step(f"[1/5] Copying ({i}/{total_files})")
             copy_with_progress(
                 src, local_input, lambda d, t: progress.set_progress(d, t, basename)
             )
 
-            # [2/4] Compress
-            progress.set_step(f"[2/4] Compressing ({i}/{total_files})")
+            # [2/5] Compress
+            progress.set_step(f"[2/5] Compressing ({i}/{total_files})")
             ok, err, local_output = _compress_file(
                 local_input,
                 config.temp_dir,
@@ -313,21 +320,38 @@ def run_compression(files: List[str], progress: ProgressUI) -> None:
             if not ok:
                 raise RuntimeError(err)
 
-            # [3/4] Verify
-            progress.set_step(f"[3/4] Verifying ({i}/{total_files})")
-            # Verify progress is indefinite/spinner mostly, so we just set indeterminate
-            progress.set_progress(0, 1, os.path.basename(local_output))
-            ok, err = _verify_file(
-                local_output,
-                lambda d, t: progress.set_progress(
-                    d, t, os.path.basename(local_output)
-                ),
-            )
-            if not ok:
-                raise RuntimeError(f"Verify failed: {err}")
+            # Confirmation Step
+            if ask_confirm:
+                progress.set_step(f"Waiting for confirmation ({i}/{total_files})")
+                original_size = os.path.getsize(local_input)
+                new_size = os.path.getsize(local_output)
 
-            # [4/4] Upload + Cleanup
-            progress.set_step(f"[4/4] Uploading ({i}/{total_files})")
+                # Block until user confirms
+                keep = confirm_callback(original_size, new_size, basename)
+
+                if not keep:
+                    progress.log(f"SKIPPED {basename} (User discarded)")
+                    # Skip to next file
+                    continue
+
+            # [3/5] Verify (Optional)
+            if verify_after:
+                progress.set_step(f"[3/5] Verifying ({i}/{total_files})")
+                # Verify progress is indefinite/spinner mostly, so we just set indeterminate
+                progress.set_progress(0, 1, os.path.basename(local_output))
+                ok, err = _verify_file(
+                    local_output,
+                    lambda d, t: progress.set_progress(
+                        d, t, os.path.basename(local_output)
+                    ),
+                )
+                if not ok:
+                    raise RuntimeError(f"Verify failed: {err}")
+            else:
+                progress.log(f"Skipped verification for {basename}")
+
+            # [4/5] Upload + Cleanup
+            progress.set_step(f"[4/5] Uploading ({i}/{total_files})")
             copy_with_progress(
                 local_output,
                 drive_output,
@@ -389,26 +413,105 @@ class CompressTool(BaseTool):
         # UI Components
         selection = CheckboxListUI(run_label="Compress")
 
+        # Options
+        verify_chk = w.Checkbox(
+            value=True, description="Verify integrity after compression"
+        )
+        confirm_chk = w.Checkbox(
+            value=True, description="Ask before saving (check size)"
+        )
+        options_box = w.VBox(
+            [verify_chk, confirm_chk], layout=w.Layout(margin="10px 0")
+        )
+
         # Initial load
         files = _find_uncompressed_games(config.switch_dir)
         selection.set_items(files)
 
         progress = ProgressUI("Compress NSZ", run_label="Compress", show_bytes=True)
 
+        # Confirmation Dialog Widget (Hidden by default)
+        confirm_ui = w.VBox(
+            [],
+            layout=w.Layout(
+                display="none", border="1px solid #888", padding="10px", margin="10px 0"
+            ),
+        )
+
+        # Threading event for confirmation
+        confirm_event = threading.Event()
+        confirm_result = [False]
+
+        def show_confirmation(orig_size: int, new_size: int, filename: str) -> bool:
+            """Show confirmation UI and wait for user input."""
+            confirm_event.clear()
+
+            saved = orig_size - new_size
+            percent = (saved / orig_size) * 100 if orig_size > 0 else 0
+
+            html = w.HTML(
+                f"<h4>Confirm Compression</h4>"
+                f"<p><b>File:</b> {filename}</p>"
+                f"<p>Original: {fmt_bytes(orig_size)}<br>"
+                f"Compressed: {fmt_bytes(new_size)}<br>"
+                f"<span style='color: #4caf50'>Saved: {fmt_bytes(saved)} ({percent:.1f}%)</span></p>"
+            )
+
+            btn_keep = w.Button(
+                description="Keep & Upload", button_style="success", icon="check"
+            )
+            btn_discard = w.Button(
+                description="Discard", button_style="danger", icon="times"
+            )
+
+            def on_keep(_):
+                confirm_result[0] = True
+                confirm_event.set()
+
+            def on_discard(_):
+                confirm_result[0] = False
+                confirm_event.set()
+
+            btn_keep.on_click(on_keep)
+            btn_discard.on_click(on_discard)
+
+            confirm_ui.children = [html, w.HBox([btn_keep, btn_discard])]
+            confirm_ui.layout.display = "block"
+
+            # Wait for user
+            confirm_event.wait()
+
+            # Reset UI
+            confirm_ui.layout.display = "none"
+            confirm_ui.children = []
+
+            return confirm_result[0]
+
         def on_run(selected: List[str]) -> None:
             if not selected:
                 return
             selection.set_running(True)
+            verify_chk.disabled = True
+            confirm_chk.disabled = True
+
             # Ensure deps before running (though run_compression loads them too)
             self.ensure_deps()
 
             def worker() -> None:
                 # Capture stdout/stderr to the log widget to confine spammy output
                 with progress.log_out:
-                    run_compression(selected, progress)
+                    run_compression(
+                        selected,
+                        progress,
+                        verify_after=verify_chk.value,
+                        ask_confirm=confirm_chk.value,
+                        confirm_callback=show_confirmation,
+                    )
 
             def on_complete() -> None:
                 selection.set_running(False)
+                verify_chk.disabled = False
+                confirm_chk.disabled = False
                 progress.finish(success=not progress.had_error())
                 # Refresh list to remove compressed files
                 new_files = _find_uncompressed_games(config.switch_dir)
@@ -424,6 +527,15 @@ class CompressTool(BaseTool):
         selection.on_run(on_run)
         selection.on_rescan(on_rescan)
 
-        ui = w.VBox([progress.title, selection.widget, progress.progress_box])
+        # Layout: Title, Selection, Options, Progress (contains logs), Confirmation overlay (inside VBox)
+        ui = w.VBox(
+            [
+                progress.title,
+                selection.widget,
+                options_box,
+                confirm_ui,
+                progress.progress_box,
+            ]
+        )
         clear_output(wait=True)
         display(ui)

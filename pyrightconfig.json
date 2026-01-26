@@ -1,8 +1,6 @@
 {
-  "stubPath": "./stubs",
-  "reportMissingImports": "warning",
-  "reportMissingModuleSource": false,
+  "venvPath": ".",
+  "venv": ".venv",
   "pythonVersion": "3.10",
-  "typeCheckingMode": "basic",
-  "extraPaths": []
+  "typeCheckingMode": "basic"
 }

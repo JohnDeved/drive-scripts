@@ -31,11 +31,6 @@ def _load_compress_deps(key_path: str | None = None) -> None:
     """Lazy-load nsz and its dependencies."""
     ensure_python_modules(["nsz"])
 
-    # Configure nsz logging to be silent (prevents stdout spam)
-    from nsz.nut import Print  # type: ignore
-
-    Print.enableInfo = False
-
     # Import Keys to ensure they are loaded (requires prod.keys in ~/.switch)
     from nsz.nut import Keys  # type: ignore
 
@@ -373,7 +368,9 @@ class CompressTool(BaseTool):
             self.ensure_deps()
 
             def worker() -> None:
-                run_compression(selected, progress)
+                # Capture stdout/stderr to the log widget to confine spammy output
+                with progress.log_out:
+                    run_compression(selected, progress)
 
             def on_complete() -> None:
                 selection.set_running(False)

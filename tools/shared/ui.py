@@ -5,7 +5,8 @@ from __future__ import annotations
 import os
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional, Set
+from datetime import datetime
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import ipywidgets as w
 from IPython.display import display
@@ -511,6 +512,7 @@ class CheckboxListUI:
         self._items: List[str] = []
         self._filtered_indices: List[int] = []
         self._selected: Set[int] = set()
+        self._file_meta: Dict[int, Tuple[int, float]] = {}  # idx -> (size, mtime)
         self._page: int = 0
         self._run_label = run_label
         self._on_run_callback: Optional[Callable[[List[str]], None]] = None
@@ -534,11 +536,16 @@ class CheckboxListUI:
         )
         self.search_input.observe(self._on_search_change, names="value")
 
-        # Checkboxes (fixed pool)
-        self._checkboxes = [
-            w.Checkbox(value=False, indent=False, layout=w.Layout(width="95%"))
-            for _ in range(self.PAGE_SIZE)
-        ]
+        # Checkboxes (fixed pool) with metadata labels
+        self._cb_items: List[Tuple[w.Checkbox, w.HTML, w.VBox]] = []
+        self._checkboxes: List[w.Checkbox] = []  # For observers logic compatibility
+
+        for _ in range(self.PAGE_SIZE):
+            cb = w.Checkbox(value=False, indent=False, layout=w.Layout(width="95%"))
+            meta = w.HTML("")
+            container = w.VBox([cb, meta], layout=w.Layout(margin="0 0 8px 0"))
+            self._cb_items.append((cb, meta, container))
+            self._checkboxes.append(cb)
 
         # Cache handlers to avoid creating new closures constantly
         self._cb_handlers = [self._make_cb_handler(i) for i in range(self.PAGE_SIZE)]
@@ -547,7 +554,7 @@ class CheckboxListUI:
         for i, cb in enumerate(self._checkboxes):
             cb.observe(self._cb_handlers[i], names="value")
 
-        self._cb_container = w.VBox(self._checkboxes)
+        self._cb_container = w.VBox([item[2] for item in self._cb_items])
 
         # Pagination
         self.btn_prev = w.Button(description="◀", layout=w.Layout(width="40px"))
@@ -591,6 +598,16 @@ class CheckboxListUI:
         self._selected = set()
         self._page = 0
         self.search_input.value = ""
+
+        # Cache metadata
+        self._file_meta = {}
+        for i, path in enumerate(items):
+            try:
+                st = os.stat(path)
+                self._file_meta[i] = (st.st_size, st.st_mtime)
+            except OSError:
+                self._file_meta[i] = (0, 0.0)
+
         self._update_display()
 
     def get_selected(self) -> List[str]:
@@ -623,19 +640,32 @@ class CheckboxListUI:
 
         # Update checkboxes
         start = self._page * self.PAGE_SIZE
-        for i, cb in enumerate(self._checkboxes):
+        for i, (cb, meta, container) in enumerate(self._cb_items):
             idx_in_filtered = start + i
             if idx_in_filtered < filtered_count:
                 real_idx = self._filtered_indices[idx_in_filtered]
-                cb.layout.display = "flex"
-                cb.description = short(os.path.basename(self._items[real_idx]), 70)
-                # Unobserve to prevent triggering handler
+                container.layout.display = "flex"
+
+                # Update checkbox
+                cb.description = short(os.path.basename(self._items[real_idx]), 60)
                 cb.unobserve(self._cb_handlers[i], names="value")
                 cb.value = real_idx in self._selected
-                # Use cached handler
                 cb.observe(self._cb_handlers[i], names="value")
+
+                # Update metadata label
+                size, mtime = self._file_meta.get(real_idx, (0, 0.0))
+                size_str = fmt_bytes(size)
+                date_str = (
+                    datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
+                    if mtime > 0
+                    else "unknown"
+                )
+                meta.value = (
+                    f"<small style='color:#888; margin-left:24px'>"
+                    f"{size_str} &middot; {date_str}</small>"
+                )
             else:
-                cb.layout.display = "none"
+                container.layout.display = "none"
 
         # Update pagination buttons
         num_pages = (filtered_count + self.PAGE_SIZE - 1) // self.PAGE_SIZE

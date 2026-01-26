@@ -435,9 +435,8 @@ class CompressTool(BaseTool):
             [verify_chk, confirm_chk], layout=w.Layout(margin="10px 0")
         )
 
-        # Initial load
-        files = _find_uncompressed_games(config.switch_dir)
-        selection.set_items(files)
+        # Async load files
+        selection.load_items_async(lambda: _find_uncompressed_games(config.switch_dir))
 
         progress = ProgressUI("Compress NSZ", run_label="Compress", show_bytes=True)
 

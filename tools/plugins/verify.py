@@ -107,16 +107,13 @@ class VerifyTool(BaseTool):
     def main(self) -> None:
         """Display verification UI."""
         ensure_drive_ready()
-        files = find_games(config.switch_dir)
-
-        if not files:
-            print("No game files found.")
-            return
 
         # UI Components
         selection = CheckboxListUI(run_label="Verify")
-        selection.set_items(files)
         progress = ProgressUI("Verify NSZ", run_label="Verify", show_bytes=False)
+
+        # Async load files
+        selection.load_items_async(lambda: find_games(config.switch_dir))
 
         def on_run(selected: List[str]) -> None:
             if not selected:

@@ -605,6 +605,7 @@ class CheckboxListUI:
         self._run_label = run_label
         self._on_run_callback: Optional[Callable[[List[str]], None]] = None
         self._on_rescan_callback: Optional[Callable[[], None]] = None
+        self._is_loading: bool = False
 
         # Header
         self.header = w.HTML("Files (0)")
@@ -615,6 +616,14 @@ class CheckboxListUI:
         self.btn_all.on_click(self._on_select_all)
         self.btn_none.on_click(self._on_select_none)
         self.btn_invert.on_click(self._on_invert)
+
+        # Loading overlay
+        self.loading_lbl = w.HTML(
+            "<div style='padding: 20px; text-align: center; color: #666;'>"
+            "<i class='fa fa-spinner fa-spin fa-2x'></i><br><br>"
+            "Scanning for files...</div>",
+            layout=w.Layout(display="none"),
+        )
 
         # Search
         self.search_input = w.Text(
@@ -706,16 +715,55 @@ class CheckboxListUI:
         self._page = 0
         self.search_input.value = ""
 
-        # Cache metadata
+        # Reset metadata cache
         self._file_meta = {}
-        for i, path in enumerate(items):
-            try:
-                st = os.stat(path)
-                self._file_meta[i] = (st.st_size, st.st_mtime)
-            except OSError:
-                self._file_meta[i] = (0, 0.0)
-
         self._update_display()
+
+    def set_loading(self, loading: bool) -> None:
+        """Show/hide loading spinner."""
+        self._is_loading = loading
+        self.loading_lbl.layout.display = "block" if loading else "none"
+        self._cb_container.layout.display = "none" if loading else "block"
+        self.btn_run.disabled = loading or len(self._selected) == 0
+        self.btn_rescan.disabled = loading
+        self.search_input.disabled = loading
+
+    def load_items_async(
+        self,
+        loader_func: Callable[[], List[str]],
+        on_complete: Optional[Callable] = None,
+    ) -> None:
+        """Load items in background thread.
+
+        Args:
+            loader_func: Function returning list of paths.
+            on_complete: Optional callback when done.
+        """
+        self.set_loading(True)
+
+        def worker():
+            try:
+                items = loader_func()
+                # Use a small delay to ensure UI updates don't collide too fast
+                time.sleep(0.1)
+                self.set_items(items)
+            finally:
+                self.set_loading(False)
+                if on_complete:
+                    on_complete()
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _ensure_metadata(self, indices: List[int]) -> None:
+        """Fetch metadata for specific indices if missing."""
+        for idx in indices:
+            if idx not in self._file_meta:
+                try:
+                    path = self._items[idx]
+                    st = os.stat(path)
+                    self._file_meta[idx] = (st.st_size, st.st_mtime)
+                except OSError:
+                    self._file_meta[idx] = (0, 0.0)
 
     def get_selected(self) -> List[str]:
         """Return list of selected file paths."""
@@ -747,6 +795,14 @@ class CheckboxListUI:
 
         # Update checkboxes
         start = self._page * self.PAGE_SIZE
+
+        # Ensure metadata for current page is loaded
+        visible_indices = [
+            self._filtered_indices[i]
+            for i in range(start, min(start + self.PAGE_SIZE, filtered_count))
+        ]
+        self._ensure_metadata(visible_indices)
+
         for i, (cb, info, container) in enumerate(self._cb_items):
             idx_in_filtered = start + i
             if idx_in_filtered < filtered_count:
@@ -885,6 +941,7 @@ class CheckboxListUI:
                     layout=w.Layout(align_items="center", margin="0 0 10px 0"),
                 ),
                 self.search_input,
+                self.loading_lbl,
                 self._cb_container,
                 w.HBox(
                     [self._page_container],

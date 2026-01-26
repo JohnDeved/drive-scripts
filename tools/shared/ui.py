@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import threading
 import time
@@ -11,20 +10,8 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import ipywidgets as w
 from IPython.display import display
-from IPython import get_ipython
 
 from .utils import fmt_bytes, fmt_time, short
-
-
-def _flush_kernel_events() -> None:
-    """Flush IPython kernel event queue to process widget callbacks."""
-    try:
-        kernel = get_ipython().kernel if get_ipython() else None
-        if kernel:
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(kernel.do_one_iteration())
-    except Exception:
-        pass  # Ignore errors if kernel is busy or not available
 
 
 class ProgressUI:
@@ -231,9 +218,6 @@ class ProgressUI:
             timeout = 0.05 if waiting_for_confirm else poll_interval
             self._event.wait(timeout=timeout)
             self._event.clear()
-
-            # Flush kernel event queue to process widget callbacks
-            _flush_kernel_events()
 
             with self._lock:
                 snap = dict(self._state)
@@ -882,9 +866,6 @@ class CheckboxListUI:
         dots = 0
         while True:
             time.sleep(0.1)
-
-            # Flush kernel event queue to process widget callbacks (search, pagination, etc.)
-            _flush_kernel_events()
 
             # Check for cancellation
             if self._cancel_requested:

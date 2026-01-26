@@ -148,17 +148,17 @@ def find_games(root: str, exts: Optional[Set[str]] = None) -> List[str]:
 
 def find_games_progressive(
     root: str,
-    on_found: Callable[[List[str]], None],
+    on_found: Callable[[str], None],
     on_scanning: Optional[Callable[[str], None]] = None,
     exts: Optional[Set[str]] = None,
     max_depth: int = 3,
 ) -> List[str]:
-    """Find game files up to max_depth, calling on_found as batches are discovered.
+    """Find game files using shell find command for better performance on network mounts.
 
     Args:
         root: Directory to search.
-        on_found: Callback receiving batches of file paths.
-        on_scanning: Optional callback receiving current path being scanned.
+        on_found: Callback receiving each file path as it's found.
+        on_scanning: Optional callback receiving status updates.
         exts: Set of extensions to match.
         max_depth: Maximum directory depth to scan.
 
@@ -168,39 +168,68 @@ def find_games_progressive(
     if exts is None:
         exts = config.game_exts
 
+    # Build find command with extension filters
+    # Example: find /path -maxdepth 3 -type f \( -iname "*.nsp" -o -iname "*.nsz" \)
+    name_args: List[str] = []
+    for ext in exts:
+        if name_args:
+            name_args.extend(["-o", "-iname", f"*{ext}"])
+        else:
+            name_args.extend(["-iname", f"*{ext}"])
+
+    cmd = [
+        "find",
+        root,
+        "-maxdepth",
+        str(max_depth),
+        "-type",
+        "f",
+        "(",
+        *name_args,
+        ")",
+    ]
+
     all_found: List[str] = []
 
-    def _scan(path: str, depth: int) -> None:
-        if depth > max_depth:
-            return
-
+    try:
         if on_scanning:
-            on_scanning(path)
+            on_scanning(root)
 
-        try:
-            entries = list(os.scandir(path))
-        except (OSError, PermissionError):
-            return
+        # Use Popen to stream results line-by-line
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
 
-        current_batch: List[str] = []
-        subdirs: List[str] = []
+        if proc.stdout:
+            for line in proc.stdout:
+                path = line.rstrip("\n")
+                if path:
+                    all_found.append(path)
+                    on_found(path)
 
-        for entry in entries:
-            if entry.is_file():
-                if os.path.splitext(entry.name)[1].lower() in exts:
-                    current_batch.append(entry.path)
-            elif entry.is_dir():
-                subdirs.append(entry.path)
+        proc.wait()
+    except (OSError, subprocess.SubprocessError):
+        # Fallback to Python walker if find command fails
+        if on_scanning:
+            on_scanning(f"{root} (fallback)")
 
-        if current_batch:
-            current_batch.sort()
-            all_found.extend(current_batch)
-            on_found(current_batch)
+        for r, _, files in os.walk(root):
+            # Check depth
+            rel = os.path.relpath(r, root)
+            depth = 1 if rel == "." else rel.count(os.sep) + 2
+            if depth > max_depth:
+                continue
 
-        for subdir in subdirs:
-            _scan(subdir, depth + 1)
+            for f in files:
+                if os.path.splitext(f)[1].lower() in exts:
+                    path = os.path.join(r, f)
+                    all_found.append(path)
+                    on_found(path)
 
-    _scan(root, 1)
+    all_found.sort()
     return all_found
 
 

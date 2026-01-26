@@ -736,20 +736,6 @@ class CheckboxListUI:
         self._file_meta = {}
         self._update_display()
 
-    def append_items(self, new_items: List[str]) -> None:
-        """Append items to existing list without resetting selection."""
-        start_idx = len(self._items)
-        self._items.extend(new_items)
-
-        # Update filtered indices if they match current search
-        term = self.search_input.value.lower()
-        for i, item in enumerate(new_items):
-            real_idx = start_idx + i
-            if not term or term in os.path.basename(item).lower():
-                self._filtered_indices.append(real_idx)
-
-        self._update_display()
-
     def set_loading(self, loading: bool) -> None:
         """Show/hide loading spinner."""
         self._is_loading = loading
@@ -765,19 +751,18 @@ class CheckboxListUI:
 
     def set_scanning_path(self, path: str) -> None:
         """Update current scanning path label."""
-        # Shorten path for display (remove drive root prefix if possible)
         from .utils import short
 
-        display_path = path
-        if path.startswith("/content/drive/Shareddrives/"):
-            display_path = path.replace("/content/drive/Shareddrives/", "")
-        elif path.startswith("/content/drive/MyDrive/"):
-            display_path = path.replace("/content/drive/MyDrive/", "")
+        # Show just the filename for cleaner display
+        display = os.path.basename(path) if os.path.basename(path) else path
 
-        # Darker than the loading text (#999), so using #777 (which is lighter than previous #444)
+        # Show count if we have items
+        count = len(self._items) + 1  # +1 for the one being added
+        count_str = f"Found {count}: " if count > 0 else ""
+
         self.scanning_path_lbl.value = (
-            f"<div style='color: #777; font-size: 0.85em; margin-top: 2px;'>"
-            f"{short(display_path, 60)}</div>"
+            f"<div style='color: #888; font-size: 0.85em; margin-top: 2px;'>"
+            f"{count_str}{short(display, 50)}</div>"
         )
 
     def load_items_async(
@@ -812,30 +797,55 @@ class CheckboxListUI:
     def load_items_progressive(
         self,
         loader_func: Callable[
-            [Callable[[List[str]], None], Optional[Callable[[str], None]]], List[str]
+            [Callable[[str], None], Optional[Callable[[str], None]]], List[str]
         ],
         on_complete: Optional[Callable] = None,
     ) -> None:
         """Load items progressively in background thread.
 
         Args:
-            loader_func: Function taking two callbacks and returning full list.
+            loader_func: Function taking on_found(path) and on_scanning(path) callbacks.
             on_complete: Optional callback when done.
         """
         self._items = []
         self._filtered_indices = []
         self._selected = set()
+        self._file_meta = {}
         self.set_loading(True)
 
-        def on_batch(batch: List[str]):
-            self.append_items(batch)
+        # Batch updates for efficiency
+        pending_items: List[str] = []
+        last_update = [time.time()]
 
-        def on_scanning(path: str):
+        def flush_pending():
+            if pending_items:
+                self._items.extend(pending_items)
+                term = self.search_input.value.lower()
+                start_idx = len(self._items) - len(pending_items)
+                for i, item in enumerate(pending_items):
+                    real_idx = start_idx + i
+                    if not term or term in os.path.basename(item).lower():
+                        self._filtered_indices.append(real_idx)
+                pending_items.clear()
+                self._update_display()
+
+        def on_found(path: str):
+            pending_items.append(path)
+            # Update scanning path to show latest file found
             self.set_scanning_path(path)
+            # Flush every 100ms or every 10 items
+            now = time.time()
+            if now - last_update[0] > 0.1 or len(pending_items) >= 10:
+                flush_pending()
+                last_update[0] = now
+
+        def on_scanning(status: str):
+            self.set_scanning_path(status)
 
         def worker():
             try:
-                loader_func(on_batch, on_scanning)
+                loader_func(on_found, on_scanning)
+                flush_pending()  # Final flush
             finally:
                 self.set_loading(False)
                 if on_complete:

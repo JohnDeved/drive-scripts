@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import threading
 import time
@@ -10,6 +11,22 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import ipywidgets as w
 from IPython.display import display
+
+
+def _schedule_callback(delay: float, callback: Callable[[], None]) -> None:
+    """Schedule a callback on the main event loop after delay seconds.
+
+    Works in Colab/Jupyter by using asyncio's event loop.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        loop.call_later(delay, callback)
+    except RuntimeError:
+        # Fallback: no event loop, use threading.Timer (won't update widgets)
+        t = threading.Timer(delay, callback)
+        t.daemon = True
+        t.start()
+
 
 from .utils import fmt_bytes, fmt_time, short
 
@@ -211,10 +228,9 @@ class ProgressUI:
         threading.Thread(target=wrapped_worker, daemon=True).start()
 
         format_stats = self._format_stats or self._default_format_stats
-        timer_ref: List[Optional[threading.Timer]] = [None]
 
         def poll_update():
-            """Timer callback to update UI."""
+            """Callback to update UI (runs on main event loop)."""
             self._event.clear()
 
             with self._lock:
@@ -254,16 +270,14 @@ class ProgressUI:
                     self._on_complete()
                 return
 
-            # Schedule next update
+            # Schedule next update on main event loop
             schedule_next()
 
         def schedule_next():
-            """Schedule next poll update."""
-            timer_ref[0] = threading.Timer(poll_interval, poll_update)
-            timer_ref[0].daemon = True
-            timer_ref[0].start()
+            """Schedule next poll update on main event loop."""
+            _schedule_callback(poll_interval, poll_update)
 
-        # Start polling timer
+        # Start polling
         schedule_next()
 
     def _show_confirmation_dialog_async(
@@ -868,11 +882,8 @@ class CheckboxListUI:
                     state["running"] = False
                     state["current_dir"] = ""
 
-        # Reference to timer for cancellation
-        timer_ref: List[Optional[threading.Timer]] = [None]
-
         def poll_update():
-            """Timer callback to update UI."""
+            """Callback to update UI (runs on main event loop)."""
             # Check for cancellation
             if self._cancel_requested:
                 with state_lock:
@@ -926,18 +937,14 @@ class CheckboxListUI:
                     on_complete()
                 return
 
-            # Schedule next update
-            timer_ref[0] = threading.Timer(0.2, poll_update)
-            timer_ref[0].daemon = True
-            timer_ref[0].start()
+            # Schedule next update on main event loop
+            _schedule_callback(0.2, poll_update)
 
         # Start worker thread
         threading.Thread(target=worker, daemon=True).start()
 
-        # Start polling timer
-        timer_ref[0] = threading.Timer(0.2, poll_update)
-        timer_ref[0].daemon = True
-        timer_ref[0].start()
+        # Start polling on main event loop
+        _schedule_callback(0.2, poll_update)
 
     def _ensure_metadata(self, indices: List[int]) -> None:
         """Fetch metadata for specific indices if missing."""

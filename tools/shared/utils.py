@@ -151,6 +151,7 @@ def find_games_progressive(
     on_found: Callable[[str], None],
     on_scanning: Optional[Callable[[str], None]] = None,
     exts: Optional[Set[str]] = None,
+    is_cancelled: Optional[Callable[[], bool]] = None,
 ) -> List[str]:
     """Find game files with progress callbacks using breadth-first search.
 
@@ -162,6 +163,7 @@ def find_games_progressive(
         on_found: Callback receiving each file path as it's found.
         on_scanning: Optional callback receiving current directory being scanned.
         exts: Set of extensions to match.
+        is_cancelled: Optional callback returning True if scan should stop.
 
     Returns:
         Full list of discovered paths.
@@ -175,9 +177,17 @@ def find_games_progressive(
     dirs_to_scan = [root]
 
     while dirs_to_scan:
+        # Check for cancellation
+        if is_cancelled and is_cancelled():
+            break
+
         next_level: List[str] = []
 
         for dirpath in dirs_to_scan:
+            # Check for cancellation
+            if is_cancelled and is_cancelled():
+                break
+
             # Report current directory
             if on_scanning:
                 rel_path = os.path.relpath(dirpath, root)
@@ -192,6 +202,10 @@ def find_games_progressive(
                 continue
 
             for entry in entries:
+                # Check for cancellation
+                if is_cancelled and is_cancelled():
+                    break
+
                 try:
                     if entry.is_file(follow_symlinks=False):
                         if os.path.splitext(entry.name)[1].lower() in exts:

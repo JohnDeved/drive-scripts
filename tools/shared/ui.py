@@ -606,6 +606,7 @@ class CheckboxListUI:
         self._on_run_callback: Optional[Callable[[List[str]], None]] = None
         self._on_rescan_callback: Optional[Callable[[], None]] = None
         self._is_loading: bool = False
+        self._cancel_requested: bool = False
 
         # Header
         self.header = w.HTML(
@@ -731,6 +732,11 @@ class CheckboxListUI:
         self.btn_run.disabled = len(self._selected) == 0
         if not loading:
             self.loading_status.value = ""
+            self._cancel_requested = False
+
+    def cancel_loading(self) -> None:
+        """Cancel any ongoing loading operation (call when switching tools)."""
+        self._cancel_requested = True
 
     def load_items_async(
         self,
@@ -764,16 +770,25 @@ class CheckboxListUI:
     def load_items_progressive(
         self,
         loader_func: Callable[
-            [Callable[[str], None], Optional[Callable[[str], None]]], List[str]
+            [
+                Callable[[str], None],
+                Optional[Callable[[str], None]],
+                Optional[Callable[[], bool]],
+            ],
+            List[str],
         ],
         on_complete: Optional[Callable] = None,
     ) -> None:
         """Load items progressively with a blocking polling loop.
 
         Args:
-            loader_func: Function taking on_found(path) and on_scanning(path) callbacks.
+            loader_func: Function taking on_found(path), on_scanning(path),
+                         and is_cancelled() callbacks.
             on_complete: Optional callback when done.
         """
+        # Cancel any previous loading
+        self._cancel_requested = False
+
         self._items = []
         self._filtered_indices = []
         self._selected = set()
@@ -785,6 +800,8 @@ class CheckboxListUI:
         state_lock = threading.Lock()
 
         def on_found(path: str):
+            if self._cancel_requested:
+                return
             self._items.append(path)
             term = self.search_input.value.lower()
             real_idx = len(self._items) - 1
@@ -798,9 +815,12 @@ class CheckboxListUI:
             with state_lock:
                 state["current_dir"] = dir_name
 
+        def is_cancelled() -> bool:
+            return self._cancel_requested
+
         def worker():
             try:
-                loader_func(on_found, on_scanning)
+                loader_func(on_found, on_scanning, is_cancelled)
             finally:
                 with state_lock:
                     state["running"] = False
@@ -813,6 +833,13 @@ class CheckboxListUI:
         dots = 0
         while True:
             time.sleep(0.3)
+
+            # Check for cancellation
+            if self._cancel_requested:
+                with state_lock:
+                    state["running"] = False
+                break
+
             dots = (dots + 1) % 4
             # Animate dots: .Scanning, ..Scanning., ...Scanning.., Scanning...
             left_dots = "." * dots
@@ -993,6 +1020,8 @@ class CheckboxListUI:
         self._update_display()
 
     def _handle_run(self, _: Any) -> None:
+        # Cancel any ongoing scan before running
+        self.cancel_loading()
         if self._on_run_callback:
             files = self.get_selected()
             if files:

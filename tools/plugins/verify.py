@@ -115,8 +115,8 @@ class VerifyTool(BaseTool):
         def load_files() -> None:
             """Load game files progressively."""
             selection.load_items_progressive(
-                lambda on_found, on_scan: find_games_progressive(
-                    config.switch_dir, on_found, on_scan
+                lambda on_found, on_scan, is_cancelled: find_games_progressive(
+                    config.switch_dir, on_found, on_scan, is_cancelled=is_cancelled
                 )
             )
 

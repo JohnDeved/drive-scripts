@@ -619,10 +619,10 @@ class CheckboxListUI:
 
         # Loading overlay
         self.spinner = w.HTML(
-            "<i class='fa fa-spinner fa-spin' style='color: #666; margin-right: 8px;'></i>"
+            "<i class='fa fa-spinner fa-spin' style='color: #999; margin-right: 8px;'></i>"
         )
         self.loading_text = w.HTML(
-            "<span style='color: #666; font-weight: 500;'>Scanning for files...</span>"
+            "<span style='color: #999; font-weight: 500;'>Scanning for files...</span>"
         )
         self.scanning_path_lbl = w.HTML("")
         self.loading_box = w.VBox(
@@ -638,7 +638,7 @@ class CheckboxListUI:
                 width="100%",
                 justify_content="center",
                 align_items="center",
-                padding="20px 0",
+                padding="10px 0",
             ),
         )
 
@@ -774,9 +774,9 @@ class CheckboxListUI:
         elif path.startswith("/content/drive/MyDrive/"):
             display_path = path.replace("/content/drive/MyDrive/", "")
 
-        # Darker than the loading text (#666), so using #444
+        # Darker than the loading text (#999), so using #777 (which is lighter than previous #444)
         self.scanning_path_lbl.value = (
-            f"<div style='color: #444; font-size: 0.85em; margin-top: 4px;'>"
+            f"<div style='color: #777; font-size: 0.85em; margin-top: 2px;'>"
             f"{short(display_path, 60)}</div>"
         )
 

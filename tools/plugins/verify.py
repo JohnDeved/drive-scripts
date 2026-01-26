@@ -113,13 +113,6 @@ class VerifyTool(BaseTool):
         selection = CheckboxListUI(run_label="Verify")
         progress = ProgressUI("Verify NSZ", run_label="Verify", show_bytes=False)
 
-        # Progressive load files (max 3 levels deep)
-        selection.load_items_progressive(
-            lambda batch_cb, scan_cb: find_games_progressive(
-                config.switch_dir, batch_cb, scan_cb, max_depth=3
-            )
-        )
-
         def on_run(selected: List[str]) -> None:
             if not selected:
                 return
@@ -146,9 +139,17 @@ class VerifyTool(BaseTool):
         selection.on_run(on_run)
         selection.on_rescan(on_rescan)
 
+        # Display UI FIRST, then start scanning
         ui = w.VBox([progress.title, selection.widget, progress.progress_box])
         clear_output(wait=True)
         display(ui)
+
+        # Now start the progressive load (UI is already visible)
+        selection.load_items_progressive(
+            lambda batch_cb, scan_cb: find_games_progressive(
+                config.switch_dir, batch_cb, scan_cb, max_depth=3
+            )
+        )
 
 
 # Backwards compatibility

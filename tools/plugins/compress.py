@@ -423,17 +423,6 @@ class CompressTool(BaseTool):
             [verify_chk, confirm_chk], layout=w.Layout(margin="10px 0")
         )
 
-        # Progressive load files (max 3 levels deep)
-        selection.load_items_progressive(
-            lambda batch_cb, scan_cb: find_games_progressive(
-                config.switch_dir,
-                batch_cb,
-                scan_cb,
-                exts={".nsp", ".xci"},
-                max_depth=3,
-            )
-        )
-
         progress = ProgressUI("Compress NSZ", run_label="Compress", show_bytes=True)
 
         # Confirmation Dialog Widget (Hidden by default)
@@ -498,7 +487,7 @@ class CompressTool(BaseTool):
         selection.on_run(on_run)
         selection.on_rescan(on_rescan)
 
-        # Layout: Title, Selection, Options, Progress (contains logs), Confirmation overlay (inside VBox)
+        # Display UI FIRST, then start scanning
         ui = w.VBox(
             [
                 progress.title,
@@ -510,3 +499,14 @@ class CompressTool(BaseTool):
         )
         clear_output(wait=True)
         display(ui)
+
+        # Now start the progressive load (UI is already visible)
+        selection.load_items_progressive(
+            lambda batch_cb, scan_cb: find_games_progressive(
+                config.switch_dir,
+                batch_cb,
+                scan_cb,
+                exts={".nsp", ".xci"},
+                max_depth=3,
+            )
+        )

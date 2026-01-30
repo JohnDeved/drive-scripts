@@ -27,6 +27,11 @@ _DEBUG_POLL = False
 # Global flag to signal all tools to exit their polling loops
 _tool_switch_requested = False
 
+# Connection health tracking - detects Colab disconnect/reconnect issues
+_poll_failure_count = 0
+_poll_success_count = 0
+_MAX_POLL_FAILURES = 5  # After this many failures, consider connection unhealthy
+
 
 def request_tool_switch() -> None:
     """Signal all active tools to exit their polling loops."""
@@ -45,7 +50,19 @@ def is_tool_switch_requested() -> bool:
     return _tool_switch_requested
 
 
-def _poll_with_events(interval: float = 0.1) -> None:
+def is_connection_healthy() -> bool:
+    """Check if the widget connection appears healthy."""
+    return _poll_failure_count < _MAX_POLL_FAILURES
+
+
+def reset_connection_state() -> None:
+    """Reset connection tracking state (call when re-displaying UI)."""
+    global _poll_failure_count, _poll_success_count
+    _poll_failure_count = 0
+    _poll_success_count = 0
+
+
+def _poll_with_events(interval: float = 0.1) -> bool:
     """Sleep while processing UI events.
 
     Uses jupyter_ui_poll if available, otherwise falls back to time.sleep.
@@ -54,7 +71,12 @@ def _poll_with_events(interval: float = 0.1) -> None:
     event loop integration. Sleeping unconditionally was causing UI freezes
     because the main thread spent too much time sleeping instead of processing
     widget updates.
+
+    Returns:
+        True if polling succeeded, False if connection issues detected.
     """
+    global _poll_failure_count, _poll_success_count
+
     if HAS_UI_POLL and ui_events is not None:
         try:
             with ui_events() as poll:
@@ -62,15 +84,24 @@ def _poll_with_events(interval: float = 0.1) -> None:
                 poll(10)
             # Only sleep a tiny bit to yield CPU, not the full interval
             time.sleep(0.01)
+            # Track successful polls - reset failure count after consistent success
+            _poll_success_count += 1
+            if _poll_success_count >= 3:
+                _poll_failure_count = 0
+            return True
         except Exception as e:
-            if _DEBUG_POLL:
-                print(f"[poll] Error: {e}")
+            _poll_failure_count += 1
+            _poll_success_count = 0
+            if _DEBUG_POLL or _poll_failure_count == 1:
+                print(f"[poll] Warning: UI poll failed ({_poll_failure_count}x): {e}")
             # On error, fall back to regular sleep
             time.sleep(interval)
+            return _poll_failure_count < _MAX_POLL_FAILURES
     else:
         if _DEBUG_POLL:
             print("[poll] jupyter_ui_poll not available, using time.sleep")
         time.sleep(interval)
+        return True
 
 
 class ProgressUI:
@@ -138,10 +169,19 @@ class ProgressUI:
             value=0, min=0, max=1, bar_style="info", layout=w.Layout(width="100%")
         )
         self.stats_lbl = w.HTML("")
-        self.log_out = w.Output(
+        # Use HTML widget instead of Output for more reliable updates after reconnect
+        # Output widgets use stream capture which breaks after Colab disconnect
+        self._log_messages: List[str] = []
+        self.log_out = w.HTML(
+            value="",
             layout=w.Layout(
-                max_height="150px", overflow="auto", border="1px solid #ccc"
-            )
+                max_height="150px",
+                overflow="auto",
+                border="1px solid #ccc",
+                padding="5px",
+                font_family="monospace",
+                font_size="12px",
+            ),
         )
         self.progress_box = w.VBox(
             [self.step_lbl, self.file_lbl, self.progress, self.stats_lbl, self.log_out],
@@ -186,6 +226,7 @@ class ProgressUI:
     def start(self) -> None:
         """Reset and show progress UI."""
         self._error = None  # Reset error state
+        self._log_messages = []  # Clear log messages
         self.set_state(
             step="",
             file="",
@@ -201,7 +242,7 @@ class ProgressUI:
         self.step_lbl.value = ""
         self.file_lbl.value = ""
         self.stats_lbl.value = ""
-        self.log_out.clear_output()
+        self.log_out.value = ""  # Clear HTML log widget
         self.progress_box.layout.display = "block"
 
     def finish(self, success: bool = True) -> None:
@@ -216,6 +257,22 @@ class ProgressUI:
     def hide(self) -> None:
         """Hide progress box."""
         self.progress_box.layout.display = "none"
+
+    def _render_logs(self) -> None:
+        """Render log messages to HTML widget.
+
+        Using HTML instead of Output widget because Output widgets use stream
+        capture which breaks after Colab disconnect/reconnect.
+        """
+        # Escape HTML and render each message as a div
+        lines = []
+        for msg in self._log_messages:
+            # Basic HTML escaping
+            escaped = (
+                msg.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            )
+            lines.append(f"<div>{escaped}</div>")
+        self.log_out.value = "".join(lines)
 
     def _default_format_stats(self, snap: Dict[str, Any], elapsed: float) -> str:
         """Default stats formatter."""
@@ -251,6 +308,7 @@ class ProgressUI:
         """Run worker in thread and update UI until complete.
 
         Uses jupyter_ui_poll to process widget events while polling.
+        Handles Colab disconnect/reconnect by detecting poll failures.
 
         Args:
             worker_func: Function to run in worker thread.
@@ -258,6 +316,7 @@ class ProgressUI:
             poll_interval: How often to update UI (seconds).
         """
         self.start()
+        reset_connection_state()  # Fresh start for connection tracking
 
         def wrapped_worker() -> None:
             try:
@@ -272,15 +331,30 @@ class ProgressUI:
         threading.Thread(target=wrapped_worker, daemon=True).start()
 
         format_stats = self._format_stats or self._default_format_stats
+        connection_lost_shown = False
 
         while True:
-            _poll_with_events(poll_interval)
+            poll_ok = _poll_with_events(poll_interval)
             self._event.clear()
 
             with self._lock:
                 snap = dict(self._state)
                 logs: List[str] = self._state["logs"]
                 self._state["logs"] = []
+
+            # Handle connection issues - show warning but keep trying
+            if not poll_ok and not connection_lost_shown:
+                connection_lost_shown = True
+                self.step_lbl.value = (
+                    "<b style='color: #ff9800;'>Connection lost - "
+                    "task continues in background. Re-run cell to restore UI.</b>"
+                )
+                # Keep the loop running - worker may still complete
+                continue
+            elif poll_ok and connection_lost_shown:
+                # Connection restored!
+                connection_lost_shown = False
+                self.step_lbl.value = f"<b>{snap['step']}</b>"
 
             self.step_lbl.value = f"<b>{snap['step']}</b>"
             self.file_lbl.value = short(snap["file"], 70)
@@ -290,9 +364,14 @@ class ProgressUI:
             elapsed = time.monotonic() - snap["start"]
             self.stats_lbl.value = format_stats(snap, elapsed)
 
-            for msg in logs:
-                with self.log_out:
-                    print(msg)
+            # Append new log messages and render as HTML
+            # Using HTML widget instead of Output for reconnect resilience
+            if logs:
+                self._log_messages.extend(logs)
+                # Keep only last 100 messages to avoid memory bloat
+                if len(self._log_messages) > 100:
+                    self._log_messages = self._log_messages[-100:]
+                self._render_logs()
 
             # Check for tool switch request - exit immediately
             if is_tool_switch_requested():
@@ -989,9 +1068,22 @@ class CheckboxListUI:
         # Start worker thread
         threading.Thread(target=worker, daemon=True).start()
 
+        # Reset connection state for fresh tracking
+        reset_connection_state()
+        connection_warning_shown = False
+
         # Poll loop with UI events processing
         while do_poll_update():
-            _poll_with_events(0.2)
+            poll_ok = _poll_with_events(0.2)
+            # Handle connection issues gracefully
+            if not poll_ok and not connection_warning_shown:
+                connection_warning_shown = True
+                self.loading_status.value = (
+                    "<span style='color: #ff9800; font-size: 0.85em;'>"
+                    "Connection lost - re-run cell to restore UI</span>"
+                )
+            elif poll_ok and connection_warning_shown:
+                connection_warning_shown = False
 
     def _ensure_metadata(self, indices: List[int]) -> None:
         """Fetch metadata for specific indices if missing."""

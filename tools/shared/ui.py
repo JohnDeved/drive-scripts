@@ -66,11 +66,10 @@ def _poll_with_events(interval: float = 0.1) -> bool:
     """Sleep while processing UI events.
 
     Uses jupyter_ui_poll if available, otherwise falls back to time.sleep.
-    The key insight is that when jupyter_ui_poll is available, we should NOT
-    sleep after processing events - the ui_events() context already handles
-    event loop integration. Sleeping unconditionally was causing UI freezes
-    because the main thread spent too much time sleeping instead of processing
-    widget updates.
+
+    The key to responsive UI updates in Jupyter is processing enough Comm
+    events. Widget property changes are sent to the frontend via Comm messages,
+    and these need to be processed for the UI to update.
 
     Returns:
         True if polling succeeded, False if connection issues detected.
@@ -79,12 +78,24 @@ def _poll_with_events(interval: float = 0.1) -> bool:
 
     if HAS_UI_POLL and ui_events is not None:
         try:
+            # Process events multiple times over the interval period
+            # This ensures we handle bursts of widget updates while still
+            # yielding CPU time
+            start = time.monotonic()
+            iterations = 0
             with ui_events() as poll:
-                # Process pending UI events - this allows widget updates to render
-                poll(10)
-            # Only sleep a tiny bit to yield CPU, not the full interval
-            time.sleep(0.01)
-            # Track successful polls - reset failure count after consistent success
+                while time.monotonic() - start < interval:
+                    # Process up to 50 events per iteration
+                    poll(50)
+                    iterations += 1
+                    # Small sleep to prevent 100% CPU, but short enough
+                    # to remain responsive
+                    time.sleep(0.005)
+
+            if _DEBUG_POLL and iterations > 1:
+                print(f"[poll] Processed {iterations} iterations in {interval}s")
+
+            # Track successful polls
             _poll_success_count += 1
             if _poll_success_count >= 3:
                 _poll_failure_count = 0

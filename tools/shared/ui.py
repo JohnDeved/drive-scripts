@@ -49,15 +49,24 @@ def _poll_with_events(interval: float = 0.1) -> None:
     """Sleep while processing UI events.
 
     Uses jupyter_ui_poll if available, otherwise falls back to time.sleep.
+    The key insight is that when jupyter_ui_poll is available, we should NOT
+    sleep after processing events - the ui_events() context already handles
+    event loop integration. Sleeping unconditionally was causing UI freezes
+    because the main thread spent too much time sleeping instead of processing
+    widget updates.
     """
     if HAS_UI_POLL and ui_events is not None:
         try:
             with ui_events() as poll:
-                poll(10)  # Process up to 10 pending UI events
+                # Process pending UI events - this allows widget updates to render
+                poll(10)
+            # Only sleep a tiny bit to yield CPU, not the full interval
+            time.sleep(0.01)
         except Exception as e:
             if _DEBUG_POLL:
                 print(f"[poll] Error: {e}")
-        time.sleep(interval)
+            # On error, fall back to regular sleep
+            time.sleep(interval)
     else:
         if _DEBUG_POLL:
             print("[poll] jupyter_ui_poll not available, using time.sleep")

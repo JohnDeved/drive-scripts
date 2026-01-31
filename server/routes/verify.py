@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, WebSocket
 from pydantic import BaseModel
 from typing import List
 import uuid
@@ -25,3 +25,9 @@ async def start_verification(request: VerifyRequest, background_tasks: Backgroun
 async def stream_verification(job_id: str):
     """Stream verification progress."""
     return sse_service.stream(job_id)
+
+
+@router.websocket("/{job_id}/ws")
+async def websocket_verification(websocket: WebSocket, job_id: str):
+    """WebSocket for verification progress."""
+    await sse_service.handle_ws(job_id, websocket)

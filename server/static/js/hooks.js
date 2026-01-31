@@ -7,7 +7,7 @@ export function useSSE(jobId, tool) {
   const [error, setError] = useState(null);
   const [confirmRequest, setConfirmRequest] = useState(null);
   const [startTime, setStartTime] = useState(null);
-  const eventSourceRef = useRef(null);
+  const socketRef = useRef(null);
 
   const reset = useCallback(() => {
     setProgress(null);
@@ -18,6 +18,13 @@ export function useSSE(jobId, tool) {
     setStartTime(null);
   }, []);
 
+  const confirm = useCallback((result) => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ type: 'confirm', result }));
+      setConfirmRequest(null);
+    }
+  }, []);
+
   useEffect(() => {
     if (!jobId) {
       reset();
@@ -25,56 +32,62 @@ export function useSSE(jobId, tool) {
     }
 
     setStartTime(Date.now());
-    const url = `api/${tool}/${jobId}/stream`;
-    const eventSource = new EventSource(url);
-    eventSourceRef.current = eventSource;
+    
+    // Resolve WebSocket URL
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    // Handle path correctly for both local and Colab proxy
+    const path = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';
+    const wsUrl = `${protocol}//${host}${path}api/${tool}/${jobId}/ws`;
 
-    eventSource.addEventListener('progress', (e) => {
-      const data = JSON.parse(e.data);
-      setProgress(prev => ({ ...prev, ...data }));
-    });
+    console.log('Connecting to WebSocket:', wsUrl);
+    const socket = new WebSocket(wsUrl);
+    socketRef.current = socket;
 
-    eventSource.addEventListener('log', (e) => {
-      const data = JSON.parse(e.data);
-      setLogs(prev => [...prev, { 
-        message: data.message, 
-        time: new Date().toLocaleTimeString() 
-      }]);
-    });
-
-    eventSource.addEventListener('complete', (e) => {
-      const data = JSON.parse(e.data);
-      const message = data.message || 'Operation complete.';
-      setLogs(prev => [...prev, { 
-        message, 
-        time: new Date().toLocaleTimeString() 
-      }]);
-      setIsComplete(true);
-      eventSource.close();
-    });
-
-    eventSource.addEventListener('error', (e) => {
-      const data = JSON.parse(e.data);
-      setError(data.message);
-      eventSource.close();
-    });
-
-    eventSource.addEventListener('confirm_request', (e) => {
-      const data = JSON.parse(e.data);
-      setConfirmRequest(data);
-    });
-
-    eventSource.onerror = () => {
-      if (eventSource.readyState !== EventSource.CLOSED) {
-        setError('Connection to server lost.');
-        eventSource.close();
+    socket.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      
+      switch (msg.type) {
+        case 'progress':
+          setProgress(prev => ({ ...prev, ...msg.data }));
+          break;
+        case 'log':
+          setLogs(prev => [...prev, { 
+            message: msg.data.message, 
+            time: new Date().toLocaleTimeString() 
+          }]);
+          break;
+        case 'confirm_request':
+          setConfirmRequest(msg.data);
+          break;
+        case 'complete':
+          setLogs(prev => [...prev, { 
+            message: msg.data.message || 'Operation complete.', 
+            time: new Date().toLocaleTimeString() 
+          }]);
+          setIsComplete(true);
+          socket.close();
+          break;
+        case 'error':
+          setError(msg.data.message);
+          socket.close();
+          break;
       }
     };
 
+    socket.onerror = (e) => {
+      console.error('WebSocket Error:', e);
+      setError('Connection lost.');
+    };
+
+    socket.onclose = () => {
+      console.log('WebSocket Closed');
+    };
+
     return () => {
-      eventSource.close();
+      socket.close();
     };
   }, [jobId, tool, reset]);
 
-  return { progress, logs, isComplete, error, confirmRequest, startTime, reset };
+  return { progress, logs, isComplete, error, confirmRequest, startTime, confirm, reset };
 }

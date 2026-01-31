@@ -8,7 +8,7 @@ import { useSSE } from '../hooks.js';
 export default function Organize() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [jobId, setJobId] = useState(null);
-  const { progress, logs, isComplete, error, confirmRequest, startTime, reset } = useSSE(jobId, 'organize');
+  const { progress, logs, isComplete, error, confirmRequest, startTime, confirm, reset } = useSSE(jobId, 'organize');
 
   const filter = useMemo(() => (f) => 
     f.is_dir || [ '.nsp', '.nsz', '.xci', '.xcz' ].some(ext => f.name.toLowerCase().endsWith(ext)), 
@@ -31,13 +31,8 @@ export default function Organize() {
     }
   };
 
-  const handleConfirm = async (apply) => {
-    if (!jobId) return;
-    try {
-      await organizeApi.confirm(jobId, apply);
-    } catch (e) {
-      console.error(e);
-    }
+  const handleConfirm = (apply) => {
+    confirm(apply);
   };
 
   const handleNew = () => {

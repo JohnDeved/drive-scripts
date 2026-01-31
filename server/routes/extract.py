@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, WebSocket
 from pydantic import BaseModel
 import uuid
 from server.services.extract_service import ExtractService
@@ -26,3 +26,9 @@ async def start_extraction(request: ExtractRequest, background_tasks: Background
 async def stream_extraction(job_id: str):
     """Stream extraction progress."""
     return sse_service.stream(job_id)
+
+
+@router.websocket("/{job_id}/ws")
+async def websocket_extraction(websocket: WebSocket, job_id: str):
+    """WebSocket for extraction progress and interaction."""
+    await sse_service.handle_ws(job_id, websocket)

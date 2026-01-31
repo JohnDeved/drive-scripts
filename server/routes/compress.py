@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, WebSocket
 from pydantic import BaseModel
 from typing import List
 import uuid
@@ -39,6 +39,12 @@ async def start_compression(
 async def stream_compression(job_id: str):
     """Stream compression progress."""
     return sse_service.stream(job_id)
+
+
+@router.websocket("/{job_id}/ws")
+async def websocket_compression(websocket: WebSocket, job_id: str):
+    """WebSocket for compression progress and interaction."""
+    await sse_service.handle_ws(job_id, websocket)
 
 
 @router.post("/{job_id}/confirm")

@@ -10,7 +10,7 @@ export default function Compress() {
   const [verifyAfter, setVerifyAfter] = useState(true);
   const [askConfirm, setAskConfirm] = useState(true);
   const [jobId, setJobId] = useState(null);
-  const { progress, logs, isComplete, error, confirmRequest, startTime, reset } = useSSE(jobId, 'compress');
+  const { progress, logs, isComplete, error, confirmRequest, startTime, confirm, reset } = useSSE(jobId, 'compress');
 
   const filter = useMemo(() => (f) => 
     f.is_dir || [ '.nsp', '.xci' ].some(ext => f.name.toLowerCase().endsWith(ext)), 
@@ -33,13 +33,8 @@ export default function Compress() {
     }
   };
 
-  const handleConfirm = async (keep) => {
-    if (!jobId) return;
-    try {
-      await compressApi.confirm(jobId, keep);
-    } catch (e) {
-      console.error(e);
-    }
+  const handleConfirm = (keep) => {
+    confirm(keep);
   };
 
   const handleNew = () => {

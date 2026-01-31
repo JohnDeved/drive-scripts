@@ -41,7 +41,7 @@ export default function Verify() {
     <div class="space-y-6">
       <div class="flex items-center space-x-3">
         <div class="p-3 bg-indigo-500/10 rounded-xl text-indigo-400">
-          <i data-lucide="check-circle" class="w-6 h-6"></i>
+          <div key="verify-header-icon"><i data-lucide="check-circle" class="w-6 h-6"></i></div>
         </div>
         <div>
           <h1 class="text-2xl font-bold text-white">Verify NSZ</h1>
@@ -72,7 +72,7 @@ export default function Verify() {
                     : 'bg-slate-700 text-slate-500 cursor-not-allowed'
                 }"
               >
-                <i data-lucide="play" class="w-5 h-5 fill-current"></i>
+                <div key="play-icon-verify"><i data-lucide="play" class="w-5 h-5 fill-current"></i></div>
                 <span>Start Verification</span>
               </button>
             </div>
@@ -109,8 +109,8 @@ export default function Verify() {
           <${LogOutput} logs=${logs} />
 
           ${error ? html`
-            <div class="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center space-x-3 text-rose-400">
-              <i data-lucide="alert-circle" class="w-5 h-5"></i>
+            <div key="error-banner" class="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center space-x-3 text-rose-400">
+              <div key="error-icon"><i data-lucide="alert-circle" class="w-5 h-5"></i></div>
               <span>${error}</span>
             </div>
           ` : ''}

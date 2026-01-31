@@ -38,8 +38,8 @@ export default function Dashboard() {
       </div>
 
       ${loading ? html`
-        <div key="loader" class="flex justify-center py-20">
-          <i data-lucide="loader-2" class="w-12 h-12 animate-spin text-sky-500"></i>
+        <div key="loader-container" class="flex justify-center py-20">
+          <div key="loader-icon"><i data-lucide="loader-2" class="w-12 h-12 animate-spin text-sky-500"></i></div>
         </div>
       ` : html`
         <div key="grid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -52,7 +52,7 @@ export default function Dashboard() {
                 class="group bg-slate-800 rounded-3xl p-8 border border-slate-700 hover:border-sky-500/50 hover:bg-slate-800/80 transition-all duration-300 shadow-xl hover:shadow-sky-500/10 relative overflow-hidden"
               >
                 <div class="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
-                  <i data-lucide="${iconName}" class="w-32 h-32"></i>
+                  <div key="bg-icon-${tool.id}"><i data-lucide="${iconName}" class="w-32 h-32"></i></div>
                 </div>
                 
                 <div class="relative z-10">
@@ -62,7 +62,7 @@ export default function Dashboard() {
                     tool.id === 'compress' ? 'bg-amber-500/20 text-amber-400' :
                     'bg-emerald-500/20 text-emerald-400'
                   }">
-                    <i data-lucide="${iconName}" class="w-8 h-8"></i>
+                    <div key="main-icon-${tool.id}"><i data-lucide="${iconName}" class="w-8 h-8"></i></div>
                   </div>
                   
                   <h3 class="text-2xl font-bold text-white mb-3 group-hover:text-sky-400 transition-colors">
@@ -73,7 +73,7 @@ export default function Dashboard() {
                   </p>
                   
                   <div class="flex items-center text-sm font-bold text-sky-500">
-                    Open Tool <i data-lucide="arrow-right" class="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform"></i>
+                    Open Tool <div key="arrow-icon-${tool.id}" class="ml-2 group-hover:translate-x-1 transition-transform"><i data-lucide="arrow-right" class="w-4 h-4"></i></div>
                   </div>
                 </div>
               </a>

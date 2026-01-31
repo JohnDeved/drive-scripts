@@ -78,7 +78,7 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
             class="p-1 hover:bg-slate-700 rounded transition-colors"
             title="Go Back"
           >
-            <i data-lucide="chevron-left" class="w-5 h-5"></i>
+            <div key="back-icon"><i data-lucide="chevron-left" class="w-5 h-5"></i></div>
           </button>
           <div class="text-xs font-mono text-slate-400 truncate">
             ${currentPath.replace(config?.drive_root || '', 'Drive')}
@@ -107,7 +107,7 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
             ${items.length === 0 ? html`
               <div class="p-12 text-center">
                 <div class="inline-flex p-4 rounded-full bg-slate-700/30 mb-4">
-                  <i data-lucide="folder-open" class="w-8 h-8 text-slate-500"></i>
+                  <div key="empty-folder-icon"><i data-lucide="folder-open" class="w-8 h-8 text-slate-500"></i></div>
                 </div>
                 <p class="text-slate-400 font-medium">No supported files found here</p>
                 <p class="text-slate-500 text-xs mt-1">Try navigating to another folder</p>

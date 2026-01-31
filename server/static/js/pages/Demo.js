@@ -33,7 +33,7 @@ export default function Demo() {
       <div class="flex items-center justify-between">
         <div class="flex items-center space-x-3">
           <div class="p-3 bg-fuchsia-500/10 rounded-xl text-fuchsia-400">
-            <i data-lucide="cpu" class="w-6 h-6"></i>
+            <div key="demo-header-icon"><i data-lucide="cpu" class="w-6 h-6"></i></div>
           </div>
           <div>
             <h1 class="text-2xl font-bold text-white">Real-time Stream Demo</h1>
@@ -46,7 +46,7 @@ export default function Demo() {
             onClick=${handleStart}
             class="px-6 py-3 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-fuchsia-600/20 flex items-center space-x-2"
           >
-            <i data-lucide="play" class="w-5 h-5 fill-current"></i>
+            <div key="play-icon-demo"><i data-lucide="play" class="w-5 h-5 fill-current"></i></div>
             <span>${isComplete ? 'Run Again' : 'Launch Simulation'}</span>
           </button>
         ` : ''}
@@ -55,7 +55,7 @@ export default function Demo() {
       ${!jobId ? html`
         <div class="bg-slate-800/50 border border-slate-700 rounded-3xl p-12 text-center space-y-4 animate-fade-in">
           <div class="mx-auto w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center text-slate-500 mb-6">
-            <i data-lucide="monitor" class="w-10 h-10"></i>
+            <div key="monitor-icon"><i data-lucide="monitor" class="w-10 h-10"></i></div>
           </div>
           <h2 class="text-xl font-bold text-white">Ready to test?</h2>
           <p class="text-slate-400 max-w-md mx-auto">
@@ -75,16 +75,16 @@ export default function Demo() {
               startTime=${startTime}
             />
           ` : html`
-            <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 flex items-center justify-center space-x-3">
-              <i data-lucide="loader-2" class="w-5 h-5 animate-spin text-fuchsia-500"></i>
+            <div key="demo-loader" class="bg-slate-800 rounded-xl p-5 border border-slate-700 flex items-center justify-center space-x-3">
+              <div key="loader-icon-demo"><i data-lucide="loader-2" class="w-5 h-5 animate-spin text-fuchsia-500"></i></div>
               <span class="text-slate-400">Waiting for stream...</span>
             </div>
           `}
 
           ${confirmRequest ? html`
-            <div class="bg-fuchsia-500/10 border border-fuchsia-500/20 rounded-2xl p-6 shadow-xl animate-slide-up">
+            <div key="confirm-panel" class="bg-fuchsia-500/10 border border-fuchsia-500/20 rounded-2xl p-6 shadow-xl animate-slide-up">
               <div class="flex items-center space-x-3 text-fuchsia-400 mb-4">
-                <i data-lucide="help-circle" class="w-6 h-6"></i>
+                <div key="confirm-icon-demo"><i data-lucide="help-circle" class="w-6 h-6"></i></div>
                 <h3 class="text-xl font-bold">Interactive Intercept</h3>
               </div>
               
@@ -113,8 +113,8 @@ export default function Demo() {
           <${LogOutput} logs=${logs} />
 
           ${error ? html`
-            <div class="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center space-x-3 text-rose-400">
-              <i data-lucide="alert-circle" class="w-5 h-5"></i>
+            <div key="error-banner" class="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center space-x-3 text-rose-400">
+              <div key="error-icon"><i data-lucide="alert-circle" class="w-5 h-5"></i></div>
               <span>${error}</span>
             </div>
           ` : ''}

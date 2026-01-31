@@ -47,7 +47,7 @@ export default function Compress() {
     <div class="space-y-6">
       <div class="flex items-center space-x-3">
         <div class="p-3 bg-amber-500/10 rounded-xl text-amber-400">
-          <i data-lucide="minimize-2" class="w-6 h-6"></i>
+          <div key="compress-header-icon"><i data-lucide="minimize-2" class="w-6 h-6"></i></div>
         </div>
         <div>
           <h1 class="text-2xl font-bold text-white">Compress NSZ</h1>
@@ -99,7 +99,7 @@ export default function Compress() {
                     : 'bg-slate-700 text-slate-500 cursor-not-allowed'
                 }"
               >
-                <i data-lucide="play" class="w-5 h-5 fill-current"></i>
+                <div key="play-icon-compress"><i data-lucide="play" class="w-5 h-5 fill-current"></i></div>
                 <span>Start Compression</span>
               </button>
             </div>
@@ -119,9 +119,9 @@ export default function Compress() {
           ` : ''}
 
           ${confirmRequest ? html`
-            <div class="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-6 shadow-xl animate-slide-up">
+            <div key="confirm-panel" class="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-6 shadow-xl animate-slide-up">
               <div class="flex items-center space-x-3 text-amber-400 mb-4">
-                <i data-lucide="help-circle" class="w-6 h-6"></i>
+                <div key="confirm-icon"><i data-lucide="help-circle" class="w-6 h-6"></i></div>
                 <h3 class="text-xl font-bold">Confirm Compression</h3>
               </div>
               
@@ -161,8 +161,8 @@ export default function Compress() {
           <${LogOutput} logs=${logs} />
 
           ${error ? html`
-            <div class="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center space-x-3 text-rose-400">
-              <i data-lucide="alert-circle" class="w-5 h-5"></i>
+            <div key="error-banner" class="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center space-x-3 text-rose-400">
+              <div key="error-icon"><i data-lucide="alert-circle" class="w-5 h-5"></i></div>
               <span>${error}</span>
             </div>
           ` : ''}

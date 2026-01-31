@@ -45,7 +45,7 @@ export default function Organize() {
     <div class="space-y-6">
       <div class="flex items-center space-x-3">
         <div class="p-3 bg-emerald-500/10 rounded-xl text-emerald-400">
-          <i data-lucide="tags" class="w-6 h-6"></i>
+          <div key="organize-header-icon"><i data-lucide="tags" class="w-6 h-6"></i></div>
         </div>
         <div>
           <h1 class="text-2xl font-bold text-white">Organize & Rename</h1>
@@ -76,7 +76,7 @@ export default function Organize() {
                     : 'bg-slate-700 text-slate-500 cursor-not-allowed'
                 }"
               >
-                <i data-lucide="play" class="w-5 h-5 fill-current"></i>
+                <div key="play-icon-organize"><i data-lucide="play" class="w-5 h-5 fill-current"></i></div>
                 <span>Analyze Files</span>
               </button>
             </div>
@@ -96,7 +96,7 @@ export default function Organize() {
           ` : ''}
 
           ${confirmRequest ? html`
-            <div class="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden animate-slide-up">
+            <div key="confirm-panel" class="bg-slate-800 rounded-2xl border border-slate-700 shadow-xl overflow-hidden animate-slide-up">
               <div class="p-6 border-b border-slate-700 bg-slate-800/50">
                 <h3 class="text-xl font-bold text-white flex items-center">
                   Proposed Changes
@@ -111,7 +111,7 @@ export default function Organize() {
                   <div key=${i} class="p-4 space-y-2">
                     <div class="text-xs text-rose-400 font-mono truncate opacity-60 line-through">${item.old_name}</div>
                     <div class="flex items-center space-x-2">
-                      <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-slate-500"></i>
+                      <div key="arrow-icon-${i}"><i data-lucide="arrow-right" class="w-3.5 h-3.5 text-slate-500"></i></div>
                       <div class="text-sm text-emerald-400 font-bold truncate">${item.new_name}</div>
                     </div>
                   </div>
@@ -138,8 +138,8 @@ export default function Organize() {
           <${LogOutput} logs=${logs} />
 
           ${error ? html`
-            <div class="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center space-x-3 text-rose-400">
-              <i data-lucide="alert-circle" class="w-5 h-5"></i>
+            <div key="error-banner" class="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center space-x-3 text-rose-400">
+              <div key="error-icon"><i data-lucide="alert-circle" class="w-5 h-5"></i></div>
               <span>${error}</span>
             </div>
           ` : ''}

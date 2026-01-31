@@ -55,7 +55,7 @@ export default function Sidebar() {
           href="#/"
           class="flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${activeId === '' ? 'bg-sky-600 text-white' : 'text-slate-300 hover:bg-slate-700'}"
         >
-          <i data-lucide="home" class="w-5 h-5"></i>
+          <div key="home-icon"><i data-lucide="home" class="w-5 h-5"></i></div>
           <span>Dashboard</span>
         </a>
         
@@ -65,7 +65,7 @@ export default function Sidebar() {
         
         ${loading ? html`
           <div key="sidebar-loader" class="flex justify-center py-4">
-            <i data-lucide="loader-2" class="w-6 h-6 animate-spin text-slate-500"></i>
+            <div key="loader-icon-sidebar"><i data-lucide="loader-2" class="w-6 h-6 animate-spin text-slate-500"></i></div>
           </div>
         ` : html`
           <div key="sidebar-tools" class="space-y-2">
@@ -77,7 +77,7 @@ export default function Sidebar() {
                     href="#/${tool.id}"
                     class="flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${activeId === tool.id ? 'bg-sky-600 text-white' : 'text-slate-300 hover:bg-slate-700'}"
                   >
-                    <i data-lucide="${iconName}" class="w-5 h-5"></i>
+                    <div key="sidebar-icon-${tool.id}"><i data-lucide="${iconName}" class="w-5 h-5"></i></div>
                     <span>${tool.title}</span>
                   </a>
                 `;
@@ -92,7 +92,7 @@ export default function Sidebar() {
           href="#/demo"
           class="flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${activeId === 'demo' ? 'bg-fuchsia-600 text-white' : 'text-slate-300 hover:bg-slate-700'}"
         >
-          <i data-lucide="cpu" class="w-5 h-5"></i>
+          <div key="demo-icon"><i data-lucide="cpu" class="w-5 h-5"></i></div>
           <span>Stream Demo</span>
         </a>
       </nav>

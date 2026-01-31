@@ -32,6 +32,7 @@ async def get_file_config():
     """Get file-related configuration (default paths, extensions)."""
     return {
         "shared_drives": config.shared_drives,
+        "switch_dir": config.switch_dir,
         "drive_root": config.drive_root,
         "archive_exts": list(config.archive_exts),
         "game_exts": list(config.game_exts),

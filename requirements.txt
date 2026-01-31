@@ -6,3 +6,4 @@ fastapi
 uvicorn
 sse-starlette
 python-multipart
+python-dotenv

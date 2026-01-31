@@ -11,6 +11,7 @@ class ExtractRequest(BaseModel):
     archive_path: str
 
 
+@router.post("")
 @router.post("/")
 async def start_extraction(request: ExtractRequest, background_tasks: BackgroundTasks):
     """Start an extraction job."""

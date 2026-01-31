@@ -1,4 +1,4 @@
-import { html, useState, useEffect } from '../lib.js';
+import { html, useState, useEffect, useMemo } from '../lib.js';
 import FileSelector from '../components/FileSelector.js';
 import ProgressBar from '../components/ProgressBar.js';
 import LogOutput from '../components/LogOutput.js';
@@ -9,6 +9,10 @@ export default function Verify() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [jobId, setJobId] = useState(null);
   const { progress, logs, isComplete, error, reset } = useSSE(jobId, 'verify');
+
+  const filter = useMemo(() => (f) => 
+    f.is_dir || [ '.nsp', '.nsz', '.xci', '.xcz' ].some(ext => f.name.toLowerCase().endsWith(ext)), 
+  []);
 
   useEffect(() => {
     if (typeof lucide !== 'undefined') {
@@ -52,7 +56,7 @@ export default function Verify() {
             <${FileSelector} 
               multi
               onSelect=${setSelectedFiles} 
-              filter=${(f) => f.is_dir || [ '.nsp', '.nsz', '.xci', '.xcz' ].some(ext => f.name.toLowerCase().endsWith(ext))}
+              filter=${filter}
             />
             
             <div class="mt-6 flex justify-between items-center">

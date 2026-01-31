@@ -12,6 +12,7 @@ class VerifyRequest(BaseModel):
     files: List[str]
 
 
+@router.post("")
 @router.post("/")
 async def start_verification(request: VerifyRequest, background_tasks: BackgroundTasks):
     """Start a verification job."""

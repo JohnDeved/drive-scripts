@@ -1,4 +1,4 @@
-import { html, useState, useEffect } from '../lib.js';
+import { html, useState, useEffect, useMemo } from '../lib.js';
 import FileSelector from '../components/FileSelector.js';
 import ProgressBar from '../components/ProgressBar.js';
 import LogOutput from '../components/LogOutput.js';
@@ -9,6 +9,10 @@ export default function Extract() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [jobId, setJobId] = useState(null);
   const { progress, logs, isComplete, error, reset } = useSSE(jobId, 'extract');
+
+  const filter = useMemo(() => (f) => 
+    f.is_dir || [ '.zip', '.7z', '.rar' ].some(ext => f.name.toLowerCase().endsWith(ext)), 
+  []);
 
   useEffect(() => {
     if (typeof lucide !== 'undefined') {
@@ -51,7 +55,7 @@ export default function Extract() {
             <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Select Archive</h2>
             <${FileSelector} 
               onSelect=${(paths) => setSelectedFile(paths[0] || null)} 
-              filter=${(f) => f.is_dir || [ '.zip', '.7z', '.rar' ].some(ext => f.name.toLowerCase().endsWith(ext))}
+              filter=${filter}
             />
             
             <div class="mt-6 flex justify-end">

@@ -5,7 +5,8 @@ from tools.registry import discover_tools
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("", response_model=List[Dict])
+@router.get("/", response_model=List[Dict])
 async def list_tools() -> List[Dict]:
     """List all available tools and their metadata."""
     tools = discover_tools()

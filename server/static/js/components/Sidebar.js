@@ -1,5 +1,5 @@
 import { html, useState, useEffect } from '../lib.js';
-import { toolsApi } from '../api/client.js';
+import { toolsApi } from '../api.js';
 
 const iconMap = {
   'file-archive-o': 'archive',
@@ -14,10 +14,15 @@ export default function Sidebar() {
   const [activeId, setActiveId] = useState('');
 
   useEffect(() => {
-    toolsApi.list().then(data => {
-      setTools(data);
-      setLoading(false);
-    });
+    toolsApi.list()
+      .then(data => {
+        setTools(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Failed to load tools in sidebar:', err);
+        setLoading(false);
+      });
     
     const handleHashChange = () => {
       const path = window.location.hash.replace('#/', '');
@@ -58,22 +63,26 @@ export default function Sidebar() {
         </div>
         
         ${loading ? html`
-          <div class="flex justify-center py-4">
+          <div key="sidebar-loader" class="flex justify-center py-4">
             <i data-lucide="loader-2" class="w-6 h-6 animate-spin text-slate-500"></i>
           </div>
-        ` : tools.map(tool => {
-            const iconName = iconMap[tool.icon] || 'archive';
-            return html`
-              <a
-                key=${tool.id}
-                href="#/${tool.id}"
-                class="flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${activeId === tool.id ? 'bg-sky-600 text-white' : 'text-slate-300 hover:bg-slate-700'}"
-              >
-                <i data-lucide="${iconName}" class="w-5 h-5"></i>
-                <span>${tool.title}</span>
-              </a>
-            `;
-        })}
+        ` : html`
+          <div key="sidebar-tools" class="space-y-2">
+            ${tools.map(tool => {
+                const iconName = iconMap[tool.icon] || 'archive';
+                return html`
+                  <a
+                    key=${tool.id}
+                    href="#/${tool.id}"
+                    class="flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${activeId === tool.id ? 'bg-sky-600 text-white' : 'text-slate-300 hover:bg-slate-700'}"
+                  >
+                    <i data-lucide="${iconName}" class="w-5 h-5"></i>
+                    <span>${tool.title}</span>
+                  </a>
+                `;
+            })}
+          </div>
+        `}
       </nav>
       
       <div class="p-4 border-t border-slate-700 text-xs text-slate-500">

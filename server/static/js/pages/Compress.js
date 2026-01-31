@@ -1,4 +1,4 @@
-import { html, useState, useEffect } from '../lib.js';
+import { html, useState, useEffect, useMemo } from '../lib.js';
 import FileSelector from '../components/FileSelector.js';
 import ProgressBar from '../components/ProgressBar.js';
 import LogOutput from '../components/LogOutput.js';
@@ -11,6 +11,10 @@ export default function Compress() {
   const [askConfirm, setAskConfirm] = useState(true);
   const [jobId, setJobId] = useState(null);
   const { progress, logs, isComplete, error, confirmRequest, reset } = useSSE(jobId, 'compress');
+
+  const filter = useMemo(() => (f) => 
+    f.is_dir || [ '.nsp', '.xci' ].some(ext => f.name.toLowerCase().endsWith(ext)), 
+  []);
 
   useEffect(() => {
     if (typeof lucide !== 'undefined') {
@@ -63,7 +67,7 @@ export default function Compress() {
             <${FileSelector} 
               multi
               onSelect=${setSelectedFiles} 
-              filter=${(f) => f.is_dir || [ '.nsp', '.xci' ].some(ext => f.name.toLowerCase().endsWith(ext))}
+              filter=${filter}
             />
             
             <div class="mt-6 flex flex-wrap gap-4 items-center">

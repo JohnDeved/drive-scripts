@@ -11,8 +11,9 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
   useEffect(() => {
     filesApi.getConfig().then(data => {
       setConfig(data);
-      setCurrentPath(data.shared_drives);
-    });
+      const startPath = data.switch_dir || data.shared_drives;
+      setCurrentPath(startPath);
+    }).catch(err => console.error('Config load error:', err));
   }, []);
 
   useEffect(() => {
@@ -23,27 +24,46 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
           setItems(filter ? data.filter(filter) : data);
           setLoading(false);
         })
-        .catch(() => setLoading(false));
+        .catch(err => {
+          console.error('File listing error:', err);
+          setLoading(false);
+        });
     }
   }, [currentPath, filter]);
 
   useEffect(() => {
     if (typeof lucide !== 'undefined') {
+        // Clear all lucide icons in the list before regenerating to prevent duplication/leftovers
+        const container = document.querySelector('[key="list"]');
+        if (container) {
+          container.querySelectorAll('svg.lucide').forEach(svg => svg.remove());
+        }
         lucide.createIcons();
     }
-  }, [items, loading, selected]);
+  }, [items, loading, Array.from(selected).join(',')]);
 
   const toggleSelect = (path) => {
-    if (multi) {
-      const newSelected = new Set(selected);
-      if (newSelected.has(path)) newSelected.delete(path);
-      else newSelected.add(path);
-      setSelected(newSelected);
-      onSelect(Array.from(newSelected));
+    const newSelected = new Set(selected);
+    if (newSelected.has(path)) {
+      newSelected.delete(path);
+      // Manually remove icons that Lucide might have left behind
+      setTimeout(() => {
+        const items = document.querySelectorAll('.cursor-pointer');
+        items.forEach(item => {
+          if (!item.className.includes('bg-sky-900/20')) {
+             const check = item.querySelector('.lucide-check');
+             if (check) check.remove();
+          }
+        });
+      }, 10);
     } else {
-      setSelected(new Set([path]));
-      onSelect([path]);
+      if (!multi) {
+        newSelected.clear();
+      }
+      newSelected.add(path);
     }
+    setSelected(newSelected);
+    onSelect(Array.from(newSelected));
   };
 
   const selectAll = () => {
@@ -87,14 +107,26 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
         ` : ''}
       </div>
 
-      <div class="flex-1 overflow-y-auto">
+      <div class="flex-1 overflow-y-auto min-h-[200px]">
         ${loading ? html`
-          <div class="h-full flex items-center justify-center">
-            <i data-lucide="loader-2" class="w-8 h-8 animate-spin text-slate-500"></i>
+          <div key="loader" class="h-full flex flex-col items-center justify-center py-10">
+            <svg class="animate-spin h-10 w-10 text-sky-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-slate-500 text-sm font-medium">Reading directory...</span>
           </div>
         ` : html`
-          <div class="divide-y divide-slate-700/50">
-            ${items.map(item => html`
+          <div key="list" class="divide-y divide-slate-700/50">
+            ${items.length === 0 ? html`
+              <div class="p-12 text-center">
+                <div class="inline-flex p-4 rounded-full bg-slate-700/30 mb-4">
+                  <i data-lucide="folder-open" class="w-8 h-8 text-slate-500"></i>
+                </div>
+                <p class="text-slate-400 font-medium">No supported files found here</p>
+                <p class="text-slate-500 text-xs mt-1">Try navigating to another folder</p>
+              </div>
+            ` : items.map(item => html`
               <div 
                 key=${item.path}
                 class="flex items-center px-4 py-2 hover:bg-slate-700/50 transition-colors cursor-pointer ${selected.has(item.path) ? 'bg-sky-900/20' : ''}"
@@ -105,9 +137,13 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
                     <i data-lucide="folder" class="w-5 h-5 text-amber-400"></i>
                   ` : (
                     multi ? html`
-                      <i data-lucide="${selected.has(item.path) ? 'check-square' : 'square'}" class="w-5 h-5 ${selected.has(item.path) ? 'text-sky-500' : 'text-slate-600'}"></i>
+                      <div class="w-5 h-5 flex items-center justify-center">
+                        <i data-lucide="${selected.has(item.path) ? 'check-square' : 'square'}" class="w-5 h-5 ${selected.has(item.path) ? 'text-sky-500' : 'text-slate-600'}"></i>
+                      </div>
                     ` : html`
-                      <i data-lucide="file" class="w-5 h-5 text-slate-400"></i>
+                      <div class="w-5 h-5 flex items-center justify-center">
+                        <i data-lucide="file" class="w-5 h-5 text-slate-400"></i>
+                      </div>
                     `
                   )}
                 </div>
@@ -122,8 +158,10 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
                 </div>
 
                 ${!item.is_dir && !multi && selected.has(item.path) ? html`
-                  <i data-lucide="check" class="w-4 h-4 text-sky-500"></i>
-                ` : ''}
+                  <div class="w-5 h-5 flex items-center justify-center">
+                    <i data-lucide="check" class="w-4 h-4 text-sky-500"></i>
+                  </div>
+                ` : html`<div class="w-5 h-5"></div>`}
               </div>
             `)}
           </div>

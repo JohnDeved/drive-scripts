@@ -6,6 +6,13 @@ import os
 from dataclasses import dataclass, field
 from typing import Set
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 
 @dataclass
 class Config:
@@ -23,9 +30,18 @@ class Config:
         max_nested_depth: Maximum depth for nested archive extraction.
     """
 
-    drive_root: str = "/content/drive"
-    switch_dir: str = ""
-    temp_dir: str = "/content/extract_temp"
+    drive_root: str = field(
+        default_factory=lambda: os.getenv("DRIVE_ROOT", "/content/drive")
+    )
+    switch_dir: str = field(default_factory=lambda: os.getenv("SWITCH_DIR", ""))
+    temp_dir: str = field(
+        default_factory=lambda: os.getenv(
+            "TEMP_DIR",
+            "/content/extract_temp"
+            if os.path.exists("/content")
+            else os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp"),
+        )
+    )
     archive_exts: Set[str] = field(default_factory=lambda: {".zip", ".7z", ".rar"})
     game_exts: Set[str] = field(
         default_factory=lambda: {".nsp", ".nsz", ".xci", ".xcz"}
@@ -35,14 +51,36 @@ class Config:
     def __post_init__(self) -> None:
         """Set default switch_dir based on drive_root if not provided."""
         if not self.switch_dir:
+            # On macOS Google Drive Desktop uses "Shared drives", Colab uses "Shareddrives"
+            # Try both common names
+            shared_name = "Shareddrives"
+            for candidate in ["Shared drives", "Shareddrives"]:
+                if os.path.exists(os.path.join(self.drive_root, candidate)):
+                    shared_name = candidate
+                    break
+
+            # Construct standard Switch path
             self.switch_dir = os.path.join(
-                self.drive_root, "Shareddrives", "Gaming", "Switch"
+                self.drive_root, shared_name, "Gaming", "Switch"
+            )
+
+            # If the constructed path doesn't exist, fall back to shared drives root
+            if not os.path.exists(self.switch_dir):
+                self.switch_dir = os.path.join(self.drive_root, shared_name)
+
+            self.switch_dir = os.path.join(
+                self.drive_root, shared_name, "Gaming", "Switch"
             )
 
     @property
     def shared_drives(self) -> str:
         """Path to shared drives directory."""
-        return os.path.join(self.drive_root, "Shareddrives")
+        shared_name = (
+            "Shared drives"
+            if os.path.exists(os.path.join(self.drive_root, "Shared drives"))
+            else "Shareddrives"
+        )
+        return os.path.join(self.drive_root, shared_name)
 
     @property
     def keys_dir(self) -> str:

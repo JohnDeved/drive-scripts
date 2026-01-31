@@ -18,6 +18,7 @@ class ConfirmRequest(BaseModel):
     keep: bool
 
 
+@router.post("")
 @router.post("/")
 async def start_compression(
     request: CompressRequest, background_tasks: BackgroundTasks

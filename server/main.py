@@ -1,10 +1,11 @@
 import os
 import time
+import sys
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from server.routes import tools, files, extract, verify, compress, organize
+from fastapi.responses import FileResponse, JSONResponse
+from server.routes import tool_routes, files, extract, verify, compress, organize
 
 app = FastAPI(title="Drive Scripts Web GUI")
 
@@ -23,16 +24,36 @@ app.add_middleware(
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = time.time()
-    response = await call_next(request)
-    process_time = (time.time() - start_time) * 1000
-    print(
-        f"INFO: {request.method} {request.url.path} - {response.status_code} ({process_time:.2f}ms)"
-    )
-    return response
+    try:
+        response = await call_next(request)
+        process_time = (time.time() - start_time) * 1000
+        print(
+            f"INFO: {request.method} {request.url.path} - {response.status_code} ({process_time:.2f}ms)"
+        )
+        sys.stdout.flush()
+        return response
+    except Exception as e:
+        print(
+            f"ERROR: Exception during {request.method} {request.url.path}: {e}",
+            file=sys.stderr,
+        )
+        import traceback
+
+        traceback.print_exc()
+        sys.stderr.flush()
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal Server Error", "error": str(e)},
+        )
+
+
+@app.get("/api/test")
+async def test_endpoint():
+    return {"status": "ok"}
 
 
 # Include API routes
-app.include_router(tools.router, prefix="/api/tools", tags=["tools"])
+app.include_router(tool_routes.router, prefix="/api/tools", tags=["tools"])
 app.include_router(files.router, prefix="/api/files", tags=["files"])
 app.include_router(extract.router, prefix="/api/extract", tags=["extract"])
 app.include_router(verify.router, prefix="/api/verify", tags=["verify"])
@@ -40,7 +61,6 @@ app.include_router(compress.router, prefix="/api/compress", tags=["compress"])
 app.include_router(organize.router, prefix="/api/organize", tags=["organize"])
 
 # Path to the static files directory
-# Use absolute path to avoid ambiguity
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_PATH = os.path.join(BASE_DIR, "static")
 
@@ -52,10 +72,7 @@ async def health_check():
 
 # Serve static files
 if os.path.exists(STATIC_PATH):
-    print(f"INFO: Serving static files from {STATIC_PATH}")
     app.mount("/", StaticFiles(directory=STATIC_PATH, html=True), name="static")
-else:
-    print(f"ERROR: Static path {STATIC_PATH} not found!")
 
 
 # Catch-all route to serve index.html for SPA routing
@@ -65,4 +82,4 @@ async def not_found_handler(request: Request, exc):
         index_file = os.path.join(STATIC_PATH, "index.html")
         if os.path.exists(index_file):
             return FileResponse(index_file)
-    return {"detail": "Not Found"}
+    return JSONResponse(status_code=404, content={"detail": "Not Found"})

@@ -13,10 +13,15 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    toolsApi.list().then(data => {
-      setTools(data);
-      setLoading(false);
-    });
+    toolsApi.list()
+      .then(data => {
+        setTools(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Failed to load tools:', err);
+        setLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -33,11 +38,11 @@ export default function Dashboard() {
       </div>
 
       ${loading ? html`
-        <div class="flex justify-center py-20">
+        <div key="loader" class="flex justify-center py-20">
           <i data-lucide="loader-2" class="w-12 h-12 animate-spin text-sky-500"></i>
         </div>
       ` : html`
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div key="grid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
           ${tools.map(tool => {
             const iconName = iconMap[tool.icon] || 'archive';
             return html`

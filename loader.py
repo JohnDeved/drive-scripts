@@ -9,14 +9,33 @@ import threading
 import time
 from typing import List
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 REPO_URL = "https://github.com/JohnDeved/drive-scripts.git"
-REPO_DIR = "/content/drive-scripts"
-DRIVE_ROOT = "/content/drive"
-PORT = 8000
+REPO_DIR = os.getenv("REPO_DIR", "/content/drive-scripts")
+DRIVE_ROOT = os.getenv("DRIVE_ROOT", "/content/drive")
+PORT = int(os.getenv("PORT", 8000))
+IS_COLAB = "google.colab" in sys.modules or os.path.exists("/content")
 
 
 def ensure_repo() -> None:
-    """Clone or pull the repository."""
+    """Clone or pull the repository (Colab only)."""
+    global REPO_DIR
+    if not IS_COLAB and REPO_DIR == "/content/drive-scripts":
+        # If running locally and REPO_DIR is default, use current working directory
+        REPO_DIR = os.getcwd()
+
+    if REPO_DIR not in sys.path:
+        sys.path.insert(0, REPO_DIR)
+
+    if not IS_COLAB:
+        return
+
     if os.path.exists(REPO_DIR):
         sys.stdout.write("Pulling latest... ")
         sys.stdout.flush()
@@ -54,14 +73,19 @@ def get_git_hash() -> str:
 def ensure_drive() -> bool:
     """Mount Google Drive."""
     print("Mounting Drive...", end=" ", flush=True)
-    if os.path.exists(f"{DRIVE_ROOT}/Shareddrives"):
+    shared_name = (
+        "Shared drives"
+        if os.path.exists(f"{DRIVE_ROOT}/Shared drives")
+        else "Shareddrives"
+    )
+    if os.path.exists(f"{DRIVE_ROOT}/{shared_name}"):
         print("already mounted")
         return True
     try:
         from google.colab import drive
 
         drive.mount(DRIVE_ROOT)
-        ok = os.path.exists(f"{DRIVE_ROOT}/Shareddrives")
+        ok = os.path.exists(f"{DRIVE_ROOT}/{shared_name}")
         print("done" if ok else "failed")
         return ok
     except ImportError:
@@ -98,7 +122,7 @@ def cleanup_port(port: int) -> None:
 
 
 def run_server():
-    """Run FastAPI server in background and pipe logs to stdout via thread."""
+    """Run FastAPI server in background."""
     os.chdir(REPO_DIR)
 
     # Construct the command
@@ -113,8 +137,12 @@ def run_server():
         "info",
     ]
 
-    # Use PIPE for all streams and close_fds=True to avoid fileno() error in Colab
-    # We must explicitly set stdin as well
+    if not IS_COLAB:
+        # Locally, just run it normally without complex pipe logic
+        return subprocess.Popen(cmd)
+
+    # In Colab, we use PIPE and a log_reader thread to pipe logs to the cell output
+    # because of how Colab handles process output.
     process = subprocess.Popen(
         cmd,
         stdin=subprocess.DEVNULL,

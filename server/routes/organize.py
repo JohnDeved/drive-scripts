@@ -16,6 +16,7 @@ class ConfirmRequest(BaseModel):
     apply: bool
 
 
+@router.post("")
 @router.post("/")
 async def start_organization(
     request: OrganizeRequest, background_tasks: BackgroundTasks

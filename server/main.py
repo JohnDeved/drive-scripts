@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
-from server.routes import tool_routes, files, extract, verify, compress, organize
+from server.routes import tool_routes, files, extract, verify, compress, organize, demo
 
 app = FastAPI(title="Drive Scripts Web GUI")
 
@@ -59,6 +59,7 @@ app.include_router(extract.router, prefix="/api/extract", tags=["extract"])
 app.include_router(verify.router, prefix="/api/verify", tags=["verify"])
 app.include_router(compress.router, prefix="/api/compress", tags=["compress"])
 app.include_router(organize.router, prefix="/api/organize", tags=["organize"])
+app.include_router(demo.router, prefix="/api/demo", tags=["demo"])
 
 # Path to the static files directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

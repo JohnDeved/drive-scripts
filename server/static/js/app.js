@@ -5,6 +5,7 @@ import Extract from './pages/Extract.js';
 import Verify from './pages/Verify.js';
 import Compress from './pages/Compress.js';
 import Organize from './pages/Organize.js';
+import Demo from './pages/Demo.js';
 
 function App() {
   const [currentPath, setCurrentPath] = useState(window.location.hash.replace('#/', ''));
@@ -29,6 +30,8 @@ function App() {
         return html`<${Compress} />`;
       case 'organize':
         return html`<${Organize} />`;
+      case 'demo':
+        return html`<${Demo} />`;
       default:
         return html`<${Dashboard} />`;
     }

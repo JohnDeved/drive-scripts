@@ -6,6 +6,7 @@ const iconMap = {
   'check-circle': 'check-circle',
   'compress': 'minimize-2',
   'tags': 'tags',
+  'cpu': 'cpu',
 };
 
 export default function Sidebar() {
@@ -83,6 +84,17 @@ export default function Sidebar() {
             })}
           </div>
         `}
+
+        <div class="pt-4 pb-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+          Developer
+        </div>
+        <a 
+          href="#/demo"
+          class="flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${activeId === 'demo' ? 'bg-fuchsia-600 text-white' : 'text-slate-300 hover:bg-slate-700'}"
+        >
+          <i data-lucide="cpu" class="w-5 h-5"></i>
+          <span>Stream Demo</span>
+        </a>
       </nav>
       
       <div class="p-4 border-t border-slate-700 text-xs text-slate-500">

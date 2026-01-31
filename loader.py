@@ -18,18 +18,21 @@ PORT = 8000
 def ensure_repo() -> None:
     """Clone or pull the repository."""
     if os.path.exists(REPO_DIR):
-        print("Pulling latest...", end=" ", flush=True)
+        sys.stdout.write("Pulling latest... ")
+        sys.stdout.flush()
         subprocess.run(
             ["git", "-C", REPO_DIR, "pull"], capture_output=True, check=False
         )
     else:
-        print("Cloning repository...", end=" ", flush=True)
+        sys.stdout.write("Cloning repository... ")
+        sys.stdout.flush()
         subprocess.run(
             ["git", "clone", "--depth=1", REPO_URL, REPO_DIR],
             capture_output=True,
             check=False,
         )
 
+    # Immediately print hash on the same line
     print(get_git_hash())
 
     if REPO_DIR not in sys.path:
@@ -40,7 +43,9 @@ def get_git_hash() -> str:
     """Get current git commit hash."""
     try:
         return subprocess.check_output(
-            ["git", "-C", REPO_DIR, "rev-parse", "--short", "HEAD"], text=True
+            ["git", "-C", REPO_DIR, "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL,
+            text=True,
         ).strip()
     except Exception:
         return "unknown"

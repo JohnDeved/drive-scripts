@@ -90,23 +90,31 @@ def main() -> None:
 
         clear_output(wait=True)
 
-        # Display launch UI
+        proxy_url = output.proxy_url(PORT)
+
+        # Display launch UI with a clear button and iframe fallback
         display(
-            HTML(f"""
-            <div style="background-color: #0f172a; color: white; padding: 20px; border-radius: 15px; font-family: sans-serif; max-width: 500px; border: 1px solid #1e293b; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);">
-                <h2 style="margin-top: 0; color: #38bdf8;">Drive Scripts Web GUI</h2>
-                <p style="color: #94a3b8; font-size: 14px;">The server is running. Click the button below to open the interface in a new window.</p>
-                <div style="margin-top: 20px; display: flex; align-items: center; justify-content: space-between;">
-                    <div style="font-size: 12px; color: #64748b;">
-                        Status: <span style="color: #10b981;">● Online</span>
-                    </div>
+            HTML(f'''
+            <div style="background-color: #0f172a; color: white; padding: 25px; border-radius: 15px; font-family: sans-serif; max-width: 600px; border: 1px solid #1e293b; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);">
+                <h2 style="margin-top: 0; color: #38bdf8; font-size: 24px;">Drive Scripts Web GUI</h2>
+                <p style="color: #94a3b8; font-size: 15px; margin-bottom: 20px;">The server is online. Use the button below to open the interface.</p>
+                
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <a href="{proxy_url}" target="_blank" style="background-color: #0ea5e9; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 14px; transition: background-color 0.2s;">
+                        Launch Web GUI
+                    </a>
+                </div>
+
+                <div style="font-size: 12px; color: #64748b; border-top: 1px solid #1e293b; pt: 15px;">
+                    Status: <span style="color: #10b981;">● Online</span> | Port: {PORT}
                 </div>
             </div>
-        """)
+        ''')
         )
 
-        # This will open the URL in a new window/tab in Colab
-        output.serve_kernel_port_as_window(PORT)
+        # Also provide the iframe version below for quick access
+        print("\nEmbedded View (Experimental):")
+        output.serve_kernel_port_as_iframe(PORT, height="600")
 
     except ImportError:
         print(f"\nWeb GUI running locally at http://localhost:{PORT}")

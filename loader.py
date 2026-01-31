@@ -56,7 +56,7 @@ def ensure_deps() -> None:
 
 
 def run_server():
-    """Run FastAPI server in background and pipe logs to stdout."""
+    """Run FastAPI server in background and pipe logs to stdout via thread."""
     os.chdir(REPO_DIR)
     cmd = [
         "uvicorn",
@@ -68,8 +68,25 @@ def run_server():
         "--log-level",
         "info",
     ]
-    # Pipe stdout/stderr to the main process so they appear in Colab
-    return subprocess.Popen(cmd, stdout=sys.stdout, stderr=sys.stderr)
+
+    # Use PIPE instead of sys.stdout to avoid fileno() error in Colab
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,  # Line buffered
+    )
+
+    def log_reader():
+        for line in process.stdout:
+            print(line, end="", flush=True)
+
+    # Start thread to read logs
+    thread = threading.Thread(target=log_reader, daemon=True)
+    thread.start()
+
+    return process
 
 
 def main() -> None:

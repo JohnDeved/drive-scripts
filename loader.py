@@ -56,9 +56,8 @@ def ensure_deps() -> None:
 
 
 def run_server():
-    """Run FastAPI server in background."""
+    """Run FastAPI server in background and pipe logs to stdout."""
     os.chdir(REPO_DIR)
-    # Using uvicorn to start the app
     cmd = [
         "uvicorn",
         "server.main:app",
@@ -67,9 +66,10 @@ def run_server():
         "--port",
         str(PORT),
         "--log-level",
-        "error",
+        "info",
     ]
-    subprocess.Popen(cmd)
+    # Pipe stdout/stderr to the main process so they appear in Colab
+    return subprocess.Popen(cmd, stdout=sys.stdout, stderr=sys.stderr)
 
 
 def main() -> None:
@@ -79,10 +79,13 @@ def main() -> None:
     ensure_deps()
 
     # Start server
-    print(f"Starting Web Server on port {PORT}...", end=" ", flush=True)
-    run_server()
-    time.sleep(2)  # Give it a moment to start
-    print("done")
+    print(f"Starting Web Server on port {PORT}...", flush=True)
+    server_proc = run_server()
+    time.sleep(3)  # Give it a bit more time to start
+
+    if server_proc.poll() is not None:
+        print("\nERROR: Web server failed to start. Check logs above.")
+        return
 
     try:
         from google.colab import output

@@ -86,30 +86,15 @@ def cleanup_port(port: int) -> None:
         pids = output.strip().split("\n")
         for pid in pids:
             if pid:
-                print(f"Stopping existing server (PID {pid})...", end=" ", flush=True)
                 subprocess.run(["kill", "-9", pid], check=False)
-                print("done")
     except Exception:
         pass
 
-    # Method 2: fuser (often more reliable in Colab)
+    # Method 2: fuser
     try:
         subprocess.run(["fuser", "-k", f"{port}/tcp"], capture_output=True, check=False)
     except Exception:
         pass
-
-    # Give OS a moment to release the socket
-    time.sleep(1.5)
-
-    # Method 3: Verify port is free
-    import socket
-
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        if s.connect_ex(("0.0.0.0", port)) == 0:
-            print(f"CRITICAL: Port {port} is still in use after cleanup attempt.")
-            # Final attempt via shell
-            subprocess.run(f"fuser -k {port}/tcp", shell=True, capture_output=True)
-            time.sleep(1)
 
 
 def run_server():
@@ -155,6 +140,24 @@ def run_server():
     return process
 
 
+def wait_for_server(port: int, timeout: int = 10) -> bool:
+    """Wait for the server to be ready by polling /health."""
+    import urllib.request
+
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            with urllib.request.urlopen(
+                f"http://localhost:{port}/health", timeout=1
+            ) as r:
+                if r.status == 200:
+                    return True
+        except Exception:
+            pass
+        time.sleep(0.2)
+    return False
+
+
 def main() -> None:
     """Bootstrap and launch Web GUI."""
     ensure_repo()
@@ -163,16 +166,18 @@ def main() -> None:
 
     # Clean up any existing server on the same port
     cleanup_port(PORT)
-    time.sleep(0.5)
 
     # Start server
-    print(f"Starting Web Server on port {PORT}...", flush=True)
+    print(f"Starting Web Server on port {PORT}...", end=" ", flush=True)
     server_proc = run_server()
-    time.sleep(3)  # Give it a bit more time to start
 
-    if server_proc.poll() is not None:
-        print("\nERROR: Web server failed to start. Check logs above.")
-        return
+    if wait_for_server(PORT):
+        print("done")
+    else:
+        if server_proc.poll() is not None:
+            print("\nERROR: Web server failed to start. Check logs above.")
+        else:
+            print("\nWARNING: Web server started but health check timed out.")
 
     try:
         from google.colab import output

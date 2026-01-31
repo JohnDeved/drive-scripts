@@ -6,16 +6,11 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(new Set());
   const [loading, setLoading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [config, setConfig] = useState(null);
 
   useEffect(() => {
-    filesApi.getConfig().then(data => {
-      setConfig(data);
-      const startPath = data.switch_dir || data.shared_drives;
-      setCurrentPath(startPath);
-    }).catch(err => console.error('Config load error:', err));
-  }, []);
-
+...
   useEffect(() => {
     if (currentPath) {
       setLoading(true);
@@ -29,7 +24,8 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
           setLoading(false);
         });
     }
-  }, [currentPath, filter]);
+  }, [currentPath, filter, refreshKey]);
+
 
   useEffect(() => {
     if (typeof lucide !== 'undefined') {
@@ -75,11 +71,20 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
         <div class="flex items-center space-x-2 overflow-hidden mr-4">
           <button 
             onClick=${goBack}
-            class="p-1 hover:bg-slate-700 rounded transition-colors"
+            class="p-1 hover:bg-slate-700 rounded transition-colors text-slate-400 hover:text-white"
             title="Go Back"
           >
             <div key="back-icon"><i data-lucide="chevron-left" class="w-5 h-5"></i></div>
           </button>
+          
+          <button 
+            onClick=${() => setRefreshKey(k => k + 1)}
+            class="p-1 hover:bg-slate-700 rounded transition-colors text-slate-400 hover:text-white"
+            title="Refresh"
+          >
+            <div key="refresh-icon"><i data-lucide="refresh-cw" class="${loading ? 'animate-spin' : ''} w-4 h-4"></i></div>
+          </button>
+
           <div class="text-xs font-mono text-slate-400 truncate">
             ${currentPath.replace(config?.drive_root || '', 'Drive')}
           </div>

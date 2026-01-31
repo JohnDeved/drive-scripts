@@ -43,32 +43,37 @@ export default function ProgressBar({ percent, step, message, total, current, st
     samples.current = [];
   }
 
+  // Timer for elapsed time
   useEffect(() => {
     if (!startTime) return;
     const interval = setInterval(() => {
-      const now = Date.now();
-      setElapsed(Math.floor((now - startTime) / 1000));
-      
-      // Add sample for moving average
-      samples.current.push({ time: now, current });
-      
-      // Keep only last 5 seconds of samples
-      const fiveSecondsAgo = now - 5000;
-      while (samples.current.length > 2 && samples.current[0].time < fiveSecondsAgo) {
-        samples.current.shift();
-      }
+      setElapsed(Math.floor((Date.now() - startTime) / 1000));
     }, 1000);
     return () => clearInterval(interval);
-  }, [startTime, current]);
+  }, [startTime]);
 
-  // Calculate Speed: Moving average over the last ~5 seconds
+  // HIGH-SPEED SAMPLING: Record current value immediately when it changes
+  useEffect(() => {
+    if (current === undefined || current === null) return;
+    
+    const now = Date.now();
+    samples.current.push({ time: now, current });
+    
+    // Keep last 5 seconds of history for a smooth but reactive average
+    const cutoff = now - 5000;
+    while (samples.current.length > 2 && samples.current[0].time < cutoff) {
+      samples.current.shift();
+    }
+  }, [current]);
+
+  // Calculate Speed: Reactive moving average
   let speed = 0;
   if (samples.current.length >= 2) {
     const first = samples.current[0];
     const last = samples.current[samples.current.length - 1];
     const timeDiff = (last.time - first.time) / 1000;
     const valDiff = last.current - first.current;
-    if (timeDiff > 0.5) {
+    if (timeDiff > 0.1) { // Min 100ms gap for stable calculation
       speed = valDiff / timeDiff;
     }
   }
@@ -76,7 +81,7 @@ export default function ProgressBar({ percent, step, message, total, current, st
   // Fallback to step average if window is too small or speed is zero
   if (speed <= 0) {
     const stepElapsed = (Date.now() - stepStartTime) / 1000;
-    speed = stepElapsed > 1 ? current / stepElapsed : 0;
+    speed = stepElapsed > 0.5 ? current / stepElapsed : 0;
   }
 
   const eta = speed > 0 ? (total - current) / speed : 0;
@@ -98,7 +103,7 @@ export default function ProgressBar({ percent, step, message, total, current, st
       
       <div class="h-4 w-full bg-slate-700 rounded-full overflow-hidden mb-3 relative">
         <div 
-          class="h-full bg-sky-500 rounded-full transition-all duration-300 shadow-[0_0_10px_rgba(14,165,233,0.5)]"
+          class="h-full bg-sky-500 rounded-full transition-all duration-150 ease-out shadow-[0_0_10px_rgba(14,165,233,0.5)]"
           style="width: ${percent}%"
         ></div>
       </div>

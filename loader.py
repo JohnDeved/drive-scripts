@@ -28,6 +28,16 @@ def ensure_repo() -> None:
         sys.path.insert(0, REPO_DIR)
 
 
+def get_git_hash() -> str:
+    """Get current git commit hash."""
+    try:
+        return subprocess.check_output(
+            ["git", "-C", REPO_DIR, "rev-parse", "--short", "HEAD"], text=True
+        ).strip()
+    except Exception:
+        return "unknown"
+
+
 def ensure_drive() -> bool:
     """Mount Google Drive."""
     print("Mounting Drive...", end=" ", flush=True)
@@ -101,6 +111,8 @@ def run_server():
 def main() -> None:
     """Bootstrap and launch Web GUI."""
     ensure_repo()
+    git_hash = get_git_hash()
+    print(f"Git Hash: {git_hash}", flush=True)
     drive_ok = ensure_drive()
     ensure_deps()
 

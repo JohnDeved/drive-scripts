@@ -1,63 +1,48 @@
-# Drive Scripts
+# Drive Scripts Web GUI
 
-Colab toolkit for managing Nintendo Switch files on Google Drive.
+A modern web-based toolkit for managing Nintendo Switch game files on Google Drive, designed specifically for Google Colab.
 
-## Quick Start
+## 🚀 Quick Start (Colab)
+
+Run this one-liner in a Colab cell to launch the Web GUI:
 
 ```python
 exec(__import__('urllib.request').request.urlopen('https://raw.githubusercontent.com/JohnDeved/drive-scripts/main/loader.py').read().decode())
 ```
 
-## Tools
+This will:
+1. Clone/update the repository
+2. Mount your Google Drive
+3. Install necessary dependencies
+4. Launch the FastAPI server
+5. Provide a "Launch Web GUI" button to open the modern interface
 
-| Tool | Description |
-|------|-------------|
-| **Extract Archives** | Extract ZIP/7z/RAR with nested archive support, upload back to Drive |
-| **Verify NSZ** | Batch verify NSP/NSZ/XCI/XCZ files using `nsz --quick-verify` |
-| **Compress NSZ** | Batch compress NSP/XCI to NSZ/XCZ (Solid/Block), verify, and replace original |
-| **Decompress NSZ** | Batch decompress NSZ/XCZ to NSP/XCI, verify, and replace original |
-| **Organize & Rename** | Rename files based on TitleDB (e.g., `Name [TitleID] [vVersion]`) |
+## ✨ Features
 
-## Setup
+- **Modern Web Interface**: Built with React and Tailwind CSS for a fast, responsive, and beautiful experience.
+- **Extract Archives**: Support for ZIP, 7z, and RAR with automatic nested archive extraction.
+- **Verify Integrity**: Batch verify NSP/NSZ/XCI/XCZ files using `nsz`.
+- **Compress NSZ**: Convert NSP/XCI to solid-compressed NSZ/XCZ format with real-time size comparison.
+- **Organize & Rename**: Automatically rename files based on Nintendo TitleDB (Format: `Name [TitleID] [vVersion].ext`).
+- **Real-time Progress**: Live progress bars, step tracking, and console logs via Server-Sent Events (SSE).
+- **Drive Optimized**: Optimized for Google Drive's filesystem and throughput limitations.
 
-Files should be in: `Google Drive/Shareddrives/Gaming/Switch/`
+## 🛠️ Tech Stack
 
-For verification, place keys in: `.switch/prod.keys`
+- **Backend**: FastAPI (Python 3.10+)
+- **Frontend**: React (TypeScript, Vite, Framer Motion)
+- **Styling**: Tailwind CSS
+- **Communication**: REST API + Server-Sent Events (SSE)
+- **Core Logic**: nsz, py7zr, rarfile
 
-## Creating Plugins
+## 📁 Configuration
 
-Drop a file in `tools/plugins/`:
+Configuration is centralized in `config.py`. Key settings include:
+- `drive_root`: Root path for Drive mount (`/content/drive`)
+- `switch_dir`: Default directory for game files
+- `temp_dir`: Local storage for processing large files
+- `max_nested_depth`: Depth limit for recursive extraction
 
-```python
-from tools.base import BaseTool
-from tools.shared import ensure_drive_ready
+## 📝 License
 
-class MyTool(BaseTool):
-    name = "my_tool"
-    title = "My Tool"
-    icon = "wrench"
-    button_style = "info"
-    order = 10
-
-    def ensure_deps(self) -> None:
-        pass
-
-    def main(self) -> None:
-        ensure_drive_ready()
-        # Your logic here
-```
-
-Auto-discovered and added to the menu.
-
-## Project Structure
-
-```
-drive-scripts/
-├── loader.py           # Bootstrap + menu
-├── config.py           # Paths and settings
-└── tools/
-    ├── base.py         # BaseTool abstract class
-    ├── registry.py     # Plugin discovery
-    ├── shared/         # Utilities (fmt_bytes, ProgressUI, etc.)
-    └── plugins/        # Tool plugins (auto-discovered)
-```
+MIT

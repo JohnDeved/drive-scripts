@@ -1,20 +1,11 @@
-"""Shared utilities and UI components for drive-scripts tools.
+"""Shared utilities for drive-scripts tools.
 
 This package re-exports commonly used utilities so plugins can import from
 a single location:
 
-    from tools.shared import fmt_bytes, ProgressUI, ensure_drive_ready
+    from tools.shared import fmt_bytes, ensure_drive_ready
 """
 
-from .ui import (
-    CheckboxListUI,
-    ProgressUI,
-    RangeSelectionUI,
-    SelectionUI,
-    clear_tool_switch,
-    is_tool_switch_requested,
-    request_tool_switch,
-)
 from .utils import (
     ProgressCallback,
     copy_with_progress,
@@ -42,13 +33,4 @@ __all__ = [
     "ensure_bins",
     "ensure_python_modules",
     "ProgressCallback",
-    # UI
-    "ProgressUI",
-    "SelectionUI",
-    "RangeSelectionUI",
-    "CheckboxListUI",
-    # Tool switch
-    "request_tool_switch",
-    "clear_tool_switch",
-    "is_tool_switch_requested",
 ]

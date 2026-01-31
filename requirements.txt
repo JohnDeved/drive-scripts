@@ -2,3 +2,7 @@ py7zr
 rarfile
 nsz
 jupyter-ui-poll
+fastapi
+uvicorn
+sse-starlette
+python-multipart

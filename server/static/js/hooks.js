@@ -36,9 +36,9 @@ export function useSSE(jobId, tool) {
     // Resolve WebSocket URL
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    // Handle path correctly for both local and Colab proxy
-    const path = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';
-    const wsUrl = `${protocol}//${host}${path}api/${tool}/${jobId}/ws`;
+    // Strip trailing slash from pathname if present
+    const path = window.location.pathname.replace(/\/$/, '');
+    const wsUrl = `${protocol}//${host}${path}/api/${tool}/${jobId}/ws`;
 
     console.log('Connecting to WebSocket:', wsUrl);
     const socket = new WebSocket(wsUrl);

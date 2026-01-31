@@ -1,4 +1,4 @@
-import { html, useState, useEffect } from '../lib.js';
+import { html, useState, useEffect, useRef } from '../lib.js';
 import { filesApi } from '../api.js';
 
 export default function FileSelector({ onSelect, multi = false, filter }) {
@@ -33,11 +33,6 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
 
   useEffect(() => {
     if (typeof lucide !== 'undefined') {
-        // Clear all lucide icons in the list before regenerating to prevent duplication/leftovers
-        const container = document.querySelector('[key="list"]');
-        if (container) {
-          container.querySelectorAll('svg.lucide').forEach(svg => svg.remove());
-        }
         lucide.createIcons();
     }
   }, [items, loading, Array.from(selected).join(',')]);
@@ -46,16 +41,6 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
     const newSelected = new Set(selected);
     if (newSelected.has(path)) {
       newSelected.delete(path);
-      // Manually remove icons that Lucide might have left behind
-      setTimeout(() => {
-        const items = document.querySelectorAll('.cursor-pointer');
-        items.forEach(item => {
-          if (!item.className.includes('bg-sky-900/20')) {
-             const check = item.querySelector('.lucide-check');
-             if (check) check.remove();
-          }
-        });
-      }, 10);
     } else {
       if (!multi) {
         newSelected.clear();
@@ -65,6 +50,7 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
     setSelected(newSelected);
     onSelect(Array.from(newSelected));
   };
+
 
   const selectAll = () => {
     const filesOnly = items.filter(i => !i.is_dir).map(i => i.path);
@@ -117,7 +103,7 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
             <span class="text-slate-500 text-sm font-medium">Reading directory...</span>
           </div>
         ` : html`
-          <div key="list" class="divide-y divide-slate-700/50">
+          <div class="divide-y divide-slate-700/50">
             ${items.length === 0 ? html`
               <div class="p-12 text-center">
                 <div class="inline-flex p-4 rounded-full bg-slate-700/30 mb-4">
@@ -134,14 +120,14 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
               >
                 <div class="mr-3">
                   ${item.is_dir ? html`
-                    <i data-lucide="folder" class="w-5 h-5 text-amber-400"></i>
+                    <div key="dir-icon"><i data-lucide="folder" class="w-5 h-5 text-amber-400"></i></div>
                   ` : (
                     multi ? html`
-                      <div class="w-5 h-5 flex items-center justify-center">
+                      <div class="w-5 h-5 flex items-center justify-center" key=${selected.has(item.path) ? 'checked' : 'unchecked'}>
                         <i data-lucide="${selected.has(item.path) ? 'check-square' : 'square'}" class="w-5 h-5 ${selected.has(item.path) ? 'text-sky-500' : 'text-slate-600'}"></i>
                       </div>
                     ` : html`
-                      <div class="w-5 h-5 flex items-center justify-center">
+                      <div class="w-5 h-5 flex items-center justify-center" key="file-icon">
                         <i data-lucide="file" class="w-5 h-5 text-slate-400"></i>
                       </div>
                     `
@@ -158,10 +144,10 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
                 </div>
 
                 ${!item.is_dir && !multi && selected.has(item.path) ? html`
-                  <div class="w-5 h-5 flex items-center justify-center">
+                  <div class="w-5 h-5 flex items-center justify-center" key="check-icon">
                     <i data-lucide="check" class="w-4 h-4 text-sky-500"></i>
                   </div>
-                ` : html`<div class="w-5 h-5"></div>`}
+                ` : html`<div class="w-5 h-5" key="empty-icon"></div>`}
               </div>
             `)}
           </div>

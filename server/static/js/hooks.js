@@ -66,6 +66,16 @@ export function useSSE(jobId, tool) {
             time: new Date().toLocaleTimeString() 
           }]);
           setIsComplete(true);
+          
+          // Play success sound
+          try {
+            const audio = new Audio('assets/success.mp3');
+            audio.volume = 0.5;
+            audio.play().catch(e => console.warn('Audio playback blocked by browser:', e));
+          } catch (e) {
+            console.error('Failed to play success sound:', e);
+          }
+          
           socket.close();
           break;
         case 'error':

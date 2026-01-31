@@ -94,8 +94,11 @@ def main() -> None:
         clear_output(wait=True)
 
         proxy_url = output.proxy_url(PORT)
+        if not proxy_url.endswith("/"):
+            proxy_url += "/"
 
         # Display launch UI with a clear button and iframe fallback
+
         display(
             HTML(f'''
             <div style="background-color: #0f172a; color: white; padding: 25px; border-radius: 15px; font-family: sans-serif; max-width: 600px; border: 1px solid #1e293b; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);">

@@ -22,7 +22,7 @@ export function useSSE(jobId, tool) {
       return;
     }
 
-    const url = `/api/${tool}/${jobId}/stream`;
+    const url = `api/${tool}/${jobId}/stream`;
     const eventSource = new EventSource(url);
     eventSourceRef.current = eventSource;
 

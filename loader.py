@@ -58,6 +58,8 @@ def ensure_deps() -> None:
 def run_server():
     """Run FastAPI server in background and pipe logs to stdout via thread."""
     os.chdir(REPO_DIR)
+
+    # Construct the command
     cmd = [
         "uvicorn",
         "server.main:app",
@@ -69,18 +71,25 @@ def run_server():
         "info",
     ]
 
-    # Use PIPE instead of sys.stdout to avoid fileno() error in Colab
+    # Use PIPE for all streams and close_fds=True to avoid fileno() error in Colab
+    # We must explicitly set stdin as well
     process = subprocess.Popen(
         cmd,
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        bufsize=1,  # Line buffered
+        close_fds=True,
     )
 
     def log_reader():
-        for line in process.stdout:
-            print(line, end="", flush=True)
+        try:
+            if process.stdout:
+                for line in iter(process.stdout.readline, ""):
+                    if line:
+                        print(line, end="", flush=True)
+        except Exception as e:
+            print(f"\n[Log Reader Error] {e}")
 
     # Start thread to read logs
     thread = threading.Thread(target=log_reader, daemon=True)

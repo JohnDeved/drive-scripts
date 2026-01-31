@@ -1,4 +1,4 @@
-import { html, useState, useEffect, useMemo } from '../lib.js';
+import { html, useState, useEffect, useMemo, useRef } from '../lib.js';
 
 const formatBytes = (bytes, decimals = 2) => {
   if (!bytes || bytes === 0) return '0 Bytes';
@@ -28,6 +28,7 @@ export default function ProgressBar({ percent, step, message, total, current, st
   const [elapsed, setElapsed] = useState(0);
   const [stepStartTime, setStepStartTime] = useState(Date.now());
   const [lastStep, setLastStep] = useState(step);
+  const samples = useRef([]); // Stores { time: ms, current: val }
   
   // Detect if we are handling bytes (usually large numbers or specific steps)
   const isBytes = useMemo(() => {
@@ -35,22 +36,49 @@ export default function ProgressBar({ percent, step, message, total, current, st
     return s.includes('copy') || s.includes('extract') || s.includes('compress') || s.includes('upload') || total > 1000000;
   }, [step, total]);
 
-  // Reset step timer when step changes
+  // Reset step timer and samples when step changes
   if (step !== lastStep) {
     setLastStep(step);
     setStepStartTime(Date.now());
+    samples.current = [];
   }
 
   useEffect(() => {
     if (!startTime) return;
     const interval = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startTime) / 1000));
+      const now = Date.now();
+      setElapsed(Math.floor((now - startTime) / 1000));
+      
+      // Add sample for moving average
+      samples.current.push({ time: now, current });
+      
+      // Keep only last 5 seconds of samples
+      const fiveSecondsAgo = now - 5000;
+      while (samples.current.length > 2 && samples.current[0].time < fiveSecondsAgo) {
+        samples.current.shift();
+      }
     }, 1000);
     return () => clearInterval(interval);
-  }, [startTime]);
+  }, [startTime, current]);
 
-  const stepElapsed = (Date.now() - stepStartTime) / 1000;
-  const speed = stepElapsed > 0.5 ? current / stepElapsed : 0;
+  // Calculate Speed: Moving average over the last ~5 seconds
+  let speed = 0;
+  if (samples.current.length >= 2) {
+    const first = samples.current[0];
+    const last = samples.current[samples.current.length - 1];
+    const timeDiff = (last.time - first.time) / 1000;
+    const valDiff = last.current - first.current;
+    if (timeDiff > 0.5) {
+      speed = valDiff / timeDiff;
+    }
+  }
+
+  // Fallback to step average if window is too small or speed is zero
+  if (speed <= 0) {
+    const stepElapsed = (Date.now() - stepStartTime) / 1000;
+    speed = stepElapsed > 1 ? current / stepElapsed : 0;
+  }
+
   const eta = speed > 0 ? (total - current) / speed : 0;
 
   return html`

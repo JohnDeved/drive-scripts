@@ -142,7 +142,8 @@ def main() -> None:
 
         clear_output(wait=True)
 
-        proxy_url = output.proxy_url(PORT)
+        # Correct way to get the proxy URL in Colab
+        proxy_url = output.eval_js(f"google.colab.kernel.proxyPort({PORT})")
         if not proxy_url.endswith("/"):
             proxy_url += "/"
 

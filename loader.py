@@ -78,6 +78,24 @@ def ensure_deps() -> None:
     print("done")
 
 
+def cleanup_port(port: int) -> None:
+    """Kill any process using the specified port."""
+    try:
+        # Find PIDs using the port
+        output = subprocess.check_output(["lsof", "-t", f"-i:{port}"], text=True)
+        pids = output.strip().split("\n")
+        for pid in pids:
+            if pid:
+                print(f"Stopping existing server (PID {pid})...", end=" ", flush=True)
+                subprocess.run(["kill", "-9", pid], check=False)
+                print("done")
+    except subprocess.CalledProcessError:
+        # lsof returns 1 if no process is found, which is fine
+        pass
+    except Exception as e:
+        print(f"Warning during port cleanup: {e}")
+
+
 def run_server():
     """Run FastAPI server in background and pipe logs to stdout via thread."""
     os.chdir(REPO_DIR)
@@ -126,6 +144,9 @@ def main() -> None:
     ensure_repo()
     drive_ok = ensure_drive()
     ensure_deps()
+
+    # Clean up any existing server on the same port
+    cleanup_port(PORT)
 
     # Start server
     print(f"Starting Web Server on port {PORT}...", flush=True)

@@ -1,4 +1,4 @@
-import { html, useState, useEffect } from '../lib.js';
+import { html, useState, useEffect, useMemo } from '../lib.js';
 
 const formatBytes = (bytes, decimals = 2) => {
   if (!bytes || bytes === 0) return '0 Bytes';
@@ -19,9 +19,28 @@ const formatTime = (seconds) => {
   return `${s}s`;
 };
 
+const formatValue = (val, isBytes) => {
+  if (isBytes) return formatBytes(val);
+  return val?.toLocaleString() || '0';
+};
+
 export default function ProgressBar({ percent, step, message, total, current, startTime }) {
   const [elapsed, setElapsed] = useState(0);
+  const [stepStartTime, setStepStartTime] = useState(Date.now());
+  const [lastStep, setLastStep] = useState(step);
   
+  // Detect if we are handling bytes (usually large numbers or specific steps)
+  const isBytes = useMemo(() => {
+    const s = step?.toLowerCase() || '';
+    return s.includes('copy') || s.includes('extract') || s.includes('compress') || s.includes('upload') || total > 1000000;
+  }, [step, total]);
+
+  // Reset step timer when step changes
+  if (step !== lastStep) {
+    setLastStep(step);
+    setStepStartTime(Date.now());
+  }
+
   useEffect(() => {
     if (!startTime) return;
     const interval = setInterval(() => {
@@ -30,7 +49,8 @@ export default function ProgressBar({ percent, step, message, total, current, st
     return () => clearInterval(interval);
   }, [startTime]);
 
-  const speed = elapsed > 0 ? current / elapsed : 0;
+  const stepElapsed = (Date.now() - stepStartTime) / 1000;
+  const speed = stepElapsed > 0.5 ? current / stepElapsed : 0;
   const eta = speed > 0 ? (total - current) / speed : 0;
 
   return html`
@@ -39,7 +59,7 @@ export default function ProgressBar({ percent, step, message, total, current, st
         <div class="flex flex-col">
           <span class="text-sm font-medium text-sky-400">${step || 'Processing...'}</span>
           <span class="text-[10px] text-slate-500 font-mono mt-1">
-            Runtime: ${formatTime(elapsed)} ${speed > 0 ? html`• Speed: ${formatBytes(speed)}/s` : ''}
+            Runtime: ${formatTime(elapsed)} ${speed > 0 ? html`• Speed: ${isBytes ? formatBytes(speed) + '/s' : speed.toFixed(1) + ' files/s'}` : ''}
           </span>
         </div>
         <div class="flex flex-col items-end">
@@ -61,7 +81,7 @@ export default function ProgressBar({ percent, step, message, total, current, st
         </div>
         ${total && total > 0 ? html`
           <div class="text-xs font-mono text-slate-500 whitespace-nowrap">
-            ${formatBytes(current)} / ${formatBytes(total)}
+            ${formatValue(current, isBytes)} / ${formatValue(total, isBytes)}
           </div>
         ` : ''}
       </div>

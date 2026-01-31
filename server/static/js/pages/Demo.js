@@ -120,9 +120,11 @@ export default function Demo() {
           ` : ''}
 
           ${isComplete ? html`
-            <div class="flex justify-between items-center p-6 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl">
+            <div key="complete-banner" class="flex justify-between items-center p-6 bg-slate-800 rounded-2xl border border-slate-700 shadow-xl">
               <div class="flex items-center space-x-3 text-emerald-400">
-                <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+                <div key="complete-icon">
+                  <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+                </div>
                 <span class="font-bold">Simulation Complete</span>
               </div>
               <button

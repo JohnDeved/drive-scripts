@@ -46,3 +46,18 @@ function App() {
 
 // Render the app
 render(html`<${App} />`, document.getElementById('root'));
+
+// Global Audio Unlocking for Background Playback
+// Browsers block audio from background tabs unless the user has interacted with the page.
+// This small hack "primes" the audio system on the first click.
+const unlockAudio = () => {
+  const silent = new Audio('assets/success.opus');
+  silent.volume = 0;
+  silent.play().then(() => {
+    console.log('Audio system unlocked for background playback.');
+    window.removeEventListener('click', unlockAudio);
+    window.removeEventListener('touchstart', unlockAudio);
+  }).catch(() => {});
+};
+window.addEventListener('click', unlockAudio);
+window.addEventListener('touchstart', unlockAudio);

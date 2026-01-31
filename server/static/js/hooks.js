@@ -69,7 +69,7 @@ export function useSSE(jobId, tool) {
           
           // Play success sound
           try {
-            const audio = new Audio('assets/success.mp3');
+            const audio = new Audio('assets/success.opus');
             audio.volume = 0.5;
             audio.play().catch(e => console.warn('Audio playback blocked by browser:', e));
           } catch (e) {

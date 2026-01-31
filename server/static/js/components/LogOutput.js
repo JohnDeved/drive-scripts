@@ -21,16 +21,19 @@ export default function LogOutput({ logs }) {
         ${logs.length === 0 ? html`
           <div class="text-slate-700 italic">No log output yet.</div>
         ` : logs.map((log, i) => {
-            const isError = log.includes('FAIL') || log.includes('Error') || log.includes('failed');
-            const isSuccess = log.includes('OK') || log.includes('success') || log.includes('Done');
+            const msg = typeof log === 'string' ? log : log.message;
+            const time = typeof log === 'string' ? new Date().toLocaleTimeString() : log.time;
+            
+            const isError = msg.includes('FAIL') || msg.includes('Error') || msg.includes('failed');
+            const isSuccess = msg.includes('OK') || msg.includes('success') || msg.includes('Done');
             
             return html`
               <div 
                 key=${i} 
                 class="${isError ? 'text-rose-400' : isSuccess ? 'text-emerald-400' : 'text-slate-300'}"
               >
-                <span class="text-slate-600 mr-2">[${new Date().toLocaleTimeString()}]</span>
-                ${log}
+                <span class="text-slate-600 mr-2">[${time}]</span>
+                ${msg}
               </div>
             `;
           })

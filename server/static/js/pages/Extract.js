@@ -8,7 +8,7 @@ import { useSSE } from '../hooks.js';
 export default function Extract() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [jobId, setJobId] = useState(null);
-  const { progress, logs, isComplete, error, reset } = useSSE(jobId, 'extract');
+  const { progress, logs, isComplete, error, startTime, reset } = useSSE(jobId, 'extract');
 
   const filter = useMemo(() => (f) => 
     f.is_dir || [ '.zip', '.7z', '.rar' ].some(ext => f.name.toLowerCase().endsWith(ext)), 
@@ -83,6 +83,7 @@ export default function Extract() {
               message=${progress.message}
               total=${progress.total}
               current=${progress.current}
+              startTime=${startTime}
             />
           ` : ''}
 

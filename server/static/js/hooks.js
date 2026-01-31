@@ -6,6 +6,7 @@ export function useSSE(jobId, tool) {
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState(null);
   const [confirmRequest, setConfirmRequest] = useState(null);
+  const [startTime, setStartTime] = useState(null);
   const eventSourceRef = useRef(null);
 
   const reset = useCallback(() => {
@@ -14,6 +15,7 @@ export function useSSE(jobId, tool) {
     setIsComplete(false);
     setError(null);
     setConfirmRequest(null);
+    setStartTime(null);
   }, []);
 
   useEffect(() => {
@@ -22,6 +24,7 @@ export function useSSE(jobId, tool) {
       return;
     }
 
+    setStartTime(Date.now());
     const url = `api/${tool}/${jobId}/stream`;
     const eventSource = new EventSource(url);
     eventSourceRef.current = eventSource;
@@ -33,12 +36,19 @@ export function useSSE(jobId, tool) {
 
     eventSource.addEventListener('log', (e) => {
       const data = JSON.parse(e.data);
-      setLogs(prev => [...prev, data.message]);
+      setLogs(prev => [...prev, { 
+        message: data.message, 
+        time: new Date().toLocaleTimeString() 
+      }]);
     });
 
     eventSource.addEventListener('complete', (e) => {
       const data = JSON.parse(e.data);
-      setLogs(prev => [...prev, data.message || 'Operation complete.']);
+      const message = data.message || 'Operation complete.';
+      setLogs(prev => [...prev, { 
+        message, 
+        time: new Date().toLocaleTimeString() 
+      }]);
       setIsComplete(true);
       eventSource.close();
     });
@@ -66,5 +76,5 @@ export function useSSE(jobId, tool) {
     };
   }, [jobId, tool, reset]);
 
-  return { progress, logs, isComplete, error, confirmRequest, reset };
+  return { progress, logs, isComplete, error, confirmRequest, startTime, reset };
 }

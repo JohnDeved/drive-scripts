@@ -8,7 +8,7 @@ import { useSSE } from '../hooks.js';
 export default function Verify() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [jobId, setJobId] = useState(null);
-  const { progress, logs, isComplete, error, reset } = useSSE(jobId, 'verify');
+  const { progress, logs, isComplete, error, startTime, reset } = useSSE(jobId, 'verify');
 
   const filter = useMemo(() => (f) => 
     f.is_dir || [ '.nsp', '.nsz', '.xci', '.xcz' ].some(ext => f.name.toLowerCase().endsWith(ext)), 
@@ -89,6 +89,7 @@ export default function Verify() {
                   message=${progress.message}
                   total=${progress.total}
                   current=${progress.current}
+                  startTime=${startTime}
                 />
               </div>
               <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 flex justify-around items-center">

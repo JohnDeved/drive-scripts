@@ -10,7 +10,7 @@ export default function Compress() {
   const [verifyAfter, setVerifyAfter] = useState(true);
   const [askConfirm, setAskConfirm] = useState(true);
   const [jobId, setJobId] = useState(null);
-  const { progress, logs, isComplete, error, confirmRequest, reset } = useSSE(jobId, 'compress');
+  const { progress, logs, isComplete, error, confirmRequest, startTime, reset } = useSSE(jobId, 'compress');
 
   const filter = useMemo(() => (f) => 
     f.is_dir || [ '.nsp', '.xci' ].some(ext => f.name.toLowerCase().endsWith(ext)), 
@@ -80,7 +80,6 @@ export default function Compress() {
                 />
                 <span class="text-sm text-slate-300 group-hover:text-white transition-colors">Verify after compression</span>
               </label>
-
               <label class="flex items-center space-x-2 cursor-pointer group">
                 <input 
                   type="checkbox" 
@@ -120,6 +119,7 @@ export default function Compress() {
               message=${progress.message}
               total=${progress.total}
               current=${progress.current}
+              startTime=${startTime}
             />
           ` : ''}
 

@@ -18,6 +18,7 @@ class CompressService:
         job_id: str, files: List[str], verify_after: bool, ask_confirm: bool
     ):
         """Main compression pipeline with SSE reporting."""
+        loop = asyncio.get_running_loop()
         try:
             await sse_service.create_job(job_id)
             ensure_python_modules(["nsz"])
@@ -73,7 +74,7 @@ class CompressService:
                                         "message": basename,
                                     },
                                 ),
-                                asyncio.get_event_loop(),
+                                loop,
                             ),
                         )
 
@@ -97,7 +98,7 @@ class CompressService:
                                     "message": basename,
                                 },
                             ),
-                            asyncio.get_event_loop(),
+                            loop,
                         )
 
                     local_output = await asyncio.to_thread(
@@ -158,7 +159,7 @@ class CompressService:
                                         "message": os.path.basename(local_output),
                                     },
                                 ),
-                                asyncio.get_event_loop(),
+                                loop,
                             )
 
                         ok, err = await asyncio.to_thread(
@@ -188,7 +189,7 @@ class CompressService:
                                         "message": os.path.basename(drive_output),
                                     },
                                 ),
-                                asyncio.get_event_loop(),
+                                loop,
                             ),
                         )
 

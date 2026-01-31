@@ -24,7 +24,8 @@ class SSEService:
             return False
 
         # Create a future to wait for the response
-        future = asyncio.get_event_loop().create_future()
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
         self.confirmations[job_id] = future
 
         # Send confirmation request to frontend

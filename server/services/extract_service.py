@@ -38,6 +38,7 @@ class ExtractService:
     @staticmethod
     async def run_extraction(job_id: str, archive_path: str):
         """Main extraction pipeline with SSE reporting."""
+        loop = asyncio.get_running_loop()
         try:
             await sse_service.create_job(job_id)
 
@@ -81,7 +82,7 @@ class ExtractService:
                             on_progress(
                                 d, t, os.path.basename(archive_path), "[1/3] Copying"
                             ),
-                            asyncio.get_event_loop(),
+                            loop,
                         )
 
                     copy_with_progress(archive_path, local_archive, _prog)
@@ -100,7 +101,7 @@ class ExtractService:
             def do_extract():
                 def _prog(d: int, t: int, f: str):
                     asyncio.run_coroutine_threadsafe(
-                        on_progress(d, t, f, step_name), asyncio.get_event_loop()
+                        on_progress(d, t, f, step_name), loop
                     )
 
                 ExtractService._extract(
@@ -130,7 +131,7 @@ class ExtractService:
                                 on_progress(
                                     i - 1, len(nested), n, f"Nested Round {rnd}"
                                 ),
-                                asyncio.get_event_loop(),
+                                loop,
                             )
 
                         ExtractService._extract(f, os.path.dirname(f), _prog)
@@ -150,7 +151,7 @@ class ExtractService:
             def do_upload():
                 def _prog(d: int, t: int, f: str):
                     asyncio.run_coroutine_threadsafe(
-                        on_progress(d, t, f, step_name), asyncio.get_event_loop()
+                        on_progress(d, t, f, step_name), loop
                     )
 
                 ExtractService._upload_all(out_dir, drive_dest, _prog)

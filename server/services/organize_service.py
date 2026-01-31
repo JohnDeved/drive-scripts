@@ -18,6 +18,7 @@ class OrganizeService:
     @staticmethod
     async def run_analysis(job_id: str, files: List[str]):
         """Analyze files and propose a rename plan."""
+        loop = asyncio.get_running_loop()
         try:
             await sse_service.create_job(job_id)
             ensure_python_modules(["nsz", "requests"])
@@ -105,7 +106,7 @@ class OrganizeService:
             apply = await sse_service.wait_for_confirmation(job_id, {"plan": plan})
 
             if apply:
-                await OrganizeService._execute_rename(job_id, plan)
+                OrganizeService._execute_rename(job_id, plan, loop)
             else:
                 await sse_service.send_event(
                     job_id, "complete", {"message": "Rename cancelled by user."}
@@ -115,7 +116,7 @@ class OrganizeService:
             await sse_service.send_event(job_id, "error", {"message": str(e)})
 
     @staticmethod
-    def _execute_rename(job_id: str, plan: List[Dict]):
+    def _execute_rename(job_id: str, plan: List[Dict], loop: asyncio.AbstractEventLoop):
         total = len(plan)
         success = 0
         fail = 0
@@ -132,7 +133,7 @@ class OrganizeService:
                         "message": item["new_name"],
                     },
                 ),
-                asyncio.get_event_loop(),
+                loop,
             )
 
             try:
@@ -143,7 +144,7 @@ class OrganizeService:
                         "log",
                         {"message": f"OK   {item['old_name']} -> {item['new_name']}"},
                     ),
-                    asyncio.get_event_loop(),
+                    loop,
                 )
                 success += 1
             except Exception as e:
@@ -151,7 +152,7 @@ class OrganizeService:
                     sse_service.send_event(
                         job_id, "log", {"message": f"FAIL {item['old_name']}: {str(e)}"}
                     ),
-                    asyncio.get_event_loop(),
+                    loop,
                 )
                 fail += 1
 
@@ -161,7 +162,7 @@ class OrganizeService:
                 "complete",
                 {"message": f"Done: {success} renamed, {fail} failed."},
             ),
-            asyncio.get_event_loop(),
+            loop,
         )
 
     @staticmethod

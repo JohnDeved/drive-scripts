@@ -18,11 +18,19 @@ PORT = 8000
 def ensure_repo() -> None:
     """Clone or pull the repository."""
     if os.path.exists(REPO_DIR):
-        print("Pulling latest...", flush=True)
-        subprocess.run(["git", "-C", REPO_DIR, "pull"], check=False)
+        print("Pulling latest...", end=" ", flush=True)
+        subprocess.run(
+            ["git", "-C", REPO_DIR, "pull"], capture_output=True, check=False
+        )
     else:
-        print("Cloning repository...", flush=True)
-        subprocess.run(["git", "clone", "--depth=1", REPO_URL, REPO_DIR], check=False)
+        print("Cloning repository...", end=" ", flush=True)
+        subprocess.run(
+            ["git", "clone", "--depth=1", REPO_URL, REPO_DIR],
+            capture_output=True,
+            check=False,
+        )
+
+    print(get_git_hash())
 
     if REPO_DIR not in sys.path:
         sys.path.insert(0, REPO_DIR)
@@ -111,8 +119,6 @@ def run_server():
 def main() -> None:
     """Bootstrap and launch Web GUI."""
     ensure_repo()
-    git_hash = get_git_hash()
-    print(f"Git Hash: {git_hash}", flush=True)
     drive_ok = ensure_drive()
     ensure_deps()
 

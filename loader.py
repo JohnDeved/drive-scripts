@@ -241,7 +241,7 @@ def main() -> None:
 
         # Also provide the iframe version below for quick access
         print("\nEmbedded View (Experimental):")
-        output.serve_kernel_port_as_iframe(PORT, height="600")
+        output.serve_kernel_port_as_iframe(PORT, height="800")
 
     except ImportError:
         print(f"\nWeb GUI running locally at http://localhost:{PORT}")

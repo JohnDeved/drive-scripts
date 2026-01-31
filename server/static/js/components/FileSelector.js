@@ -10,7 +10,13 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
   const [config, setConfig] = useState(null);
 
   useEffect(() => {
-...
+    filesApi.getConfig().then(data => {
+      setConfig(data);
+      const startPath = data.switch_dir || data.shared_drives;
+      setCurrentPath(startPath);
+    }).catch(err => console.error('Config load error:', err));
+  }, []);
+
   useEffect(() => {
     if (currentPath) {
       setLoading(true);
@@ -25,7 +31,6 @@ export default function FileSelector({ onSelect, multi = false, filter }) {
         });
     }
   }, [currentPath, filter, refreshKey]);
-
 
   useEffect(() => {
     if (typeof lucide !== 'undefined') {

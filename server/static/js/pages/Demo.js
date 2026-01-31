@@ -82,7 +82,7 @@ export default function Demo() {
           `}
 
           ${confirmRequest ? html`
-            <div key="confirm-panel" class="bg-fuchsia-500/10 border border-fuchsia-500/20 rounded-2xl p-6 shadow-xl animate-slide-up">
+            <div key="confirm-panel-demo" class="bg-fuchsia-500/10 border border-fuchsia-500/20 rounded-2xl p-6 shadow-xl animate-slide-up">
               <div class="flex items-center space-x-3 text-fuchsia-400 mb-4">
                 <div key="confirm-icon-demo"><i data-lucide="help-circle" class="w-6 h-6"></i></div>
                 <h3 class="text-xl font-bold">Interactive Intercept</h3>
@@ -113,8 +113,8 @@ export default function Demo() {
           <${LogOutput} logs=${logs} />
 
           ${error ? html`
-            <div key="error-banner" class="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center space-x-3 text-rose-400">
-              <div key="error-icon"><i data-lucide="alert-circle" class="w-5 h-5"></i></div>
+            <div key="error-banner-demo" class="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center space-x-3 text-rose-400">
+              <div key="error-icon-demo"><i data-lucide="alert-circle" class="w-5 h-5"></i></div>
               <span>${error}</span>
             </div>
           ` : ''}

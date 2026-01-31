@@ -1,27 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from './lib.js';
 
-export interface ProgressData {
-  step?: string;
-  current?: number;
-  total?: number;
-  percent?: number;
-  message?: string;
-  stats?: Record<string, any>;
-  [key: string]: any;
-}
-
-export interface SSEEvent {
-  type: 'progress' | 'log' | 'complete' | 'error' | 'confirm_request' | 'cancelled';
-  data: any;
-}
-
-export function useSSE(jobId: Optional<string>, tool: string) {
-  const [progress, setProgress] = useState<ProgressData | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
+export function useSSE(jobId, tool) {
+  const [progress, setProgress] = useState(null);
+  const [logs, setLogs] = useState([]);
   const [isComplete, setIsComplete] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [confirmRequest, setConfirmRequest] = useState<any>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const [error, setError] = useState(null);
+  const [confirmRequest, setConfirmRequest] = useState(null);
+  const eventSourceRef = useRef(null);
 
   const reset = useCallback(() => {
     setProgress(null);
@@ -42,35 +27,34 @@ export function useSSE(jobId: Optional<string>, tool: string) {
     eventSourceRef.current = eventSource;
 
     eventSource.addEventListener('progress', (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
+      const data = JSON.parse(e.data);
       setProgress(prev => ({ ...prev, ...data }));
     });
 
     eventSource.addEventListener('log', (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
+      const data = JSON.parse(e.data);
       setLogs(prev => [...prev, data.message]);
     });
 
     eventSource.addEventListener('complete', (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
+      const data = JSON.parse(e.data);
       setLogs(prev => [...prev, data.message || 'Operation complete.']);
       setIsComplete(true);
       eventSource.close();
     });
 
     eventSource.addEventListener('error', (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
+      const data = JSON.parse(e.data);
       setError(data.message);
       eventSource.close();
     });
 
     eventSource.addEventListener('confirm_request', (e) => {
-      const data = JSON.parse((e as MessageEvent).data);
+      const data = JSON.parse(e.data);
       setConfirmRequest(data);
     });
 
     eventSource.onerror = () => {
-      // Don't set error if we manually closed it
       if (eventSource.readyState !== EventSource.CLOSED) {
         setError('Connection to server lost.');
         eventSource.close();
@@ -84,5 +68,3 @@ export function useSSE(jobId: Optional<string>, tool: string) {
 
   return { progress, logs, isComplete, error, confirmRequest, reset };
 }
-
-type Optional<T> = T | null | undefined;

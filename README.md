@@ -19,7 +19,7 @@ This will:
 
 ## ✨ Features
 
-- **Modern Web Interface**: Built with React and Tailwind CSS for a fast, responsive, and beautiful experience.
+- **Modern Web Interface**: Built with Preact and Tailwind CSS. **Zero build step required** — works immediately in Colab.
 - **Extract Archives**: Support for ZIP, 7z, and RAR with automatic nested archive extraction.
 - **Verify Integrity**: Batch verify NSP/NSZ/XCI/XCZ files using `nsz`.
 - **Compress NSZ**: Convert NSP/XCI to solid-compressed NSZ/XCZ format with real-time size comparison.
@@ -30,8 +30,8 @@ This will:
 ## 🛠️ Tech Stack
 
 - **Backend**: FastAPI (Python 3.10+)
-- **Frontend**: React (TypeScript, Vite, Framer Motion)
-- **Styling**: Tailwind CSS
+- **Frontend**: Preact + HTM (Build-free, ESM based)
+- **Styling**: Tailwind CSS (CDN)
 - **Communication**: REST API + Server-Sent Events (SSE)
 - **Core Logic**: nsz, py7zr, rarfile
 

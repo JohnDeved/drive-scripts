@@ -24,8 +24,8 @@ app.include_router(verify.router, prefix="/api/verify", tags=["verify"])
 app.include_router(compress.router, prefix="/api/compress", tags=["compress"])
 app.include_router(organize.router, prefix="/api/organize", tags=["organize"])
 
-# Path to the React build directory
-WEB_DIST_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web", "dist")
+# Path to the static files directory
+STATIC_PATH = os.path.join(os.path.dirname(__file__), "static")
 
 
 @app.get("/health")
@@ -33,21 +33,13 @@ async def health_check():
     return {"status": "ok"}
 
 
-# Serve static files from the React build
-if os.path.exists(WEB_DIST_PATH):
-    app.mount("/", StaticFiles(directory=WEB_DIST_PATH, html=True), name="static")
-else:
-
-    @app.get("/")
-    async def root():
-        return {"message": "Web GUI not built yet. Please run build-web.sh"}
+# Serve static files
+app.mount("/", StaticFiles(directory=STATIC_PATH, html=True), name="static")
 
 
-# Catch-all route to serve index.html for React Router
+# Catch-all route to serve index.html for SPA routing
 @app.exception_handler(404)
 async def not_found_handler(request, exc):
-    if not request.url.path.startswith("/api") and os.path.exists(
-        os.path.join(WEB_DIST_PATH, "index.html")
-    ):
-        return FileResponse(os.path.join(WEB_DIST_PATH, "index.html"))
+    if not request.url.path.startswith("/api"):
+        return FileResponse(os.path.join(STATIC_PATH, "index.html"))
     return {"detail": "Not Found"}
